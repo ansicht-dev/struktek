@@ -13,16 +13,19 @@
 import * as vscode from 'vscode';
 import { composeCommand } from './compose';
 import { configureMcpCommand } from './configureMcp';
+import { History } from './history';
 import { Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
 import { LibraryTreeProvider } from './libraryView';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
+import { StruktekPanel } from './panel';
 import { newTemplateBody, seedLibrary } from './seed';
 import { Stats } from './stats';
 
 interface Session {
   readonly library: Library;
   readonly stats: Stats;
+  readonly history: History;
   readonly workspaceRoot: string;
   mcp?: McpServerHost;
 }
@@ -36,6 +39,9 @@ let session: Session | undefined;
  * feeds it — without this the tree would keep showing the previous library.
  */
 let refreshTree: () => void = () => undefined;
+
+/** Set once the panel exists, so a library change repaints whatever it shows. */
+let refreshPanel: () => void = () => undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   context.subscriptions.push(initLog());
@@ -67,9 +73,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   refreshTree = () => tree.refresh();
   refreshTree();
 
+  const panel = new StruktekPanel(context.extensionUri, () =>
+    session ? { library: session.library, stats: session.stats, history: session.history } : undefined,
+  );
+  context.subscriptions.push(panel);
+  refreshPanel = () => panel.refresh();
+
   context.subscriptions.push(
     vscode.commands.registerCommand('struktek.compose', (template?: string) =>
-      withSession((s) => composeCommand(s.library, s.stats, typeof template === 'string' ? template : undefined)),
+      withSession((s) =>
+        composeCommand(
+          s.library,
+          s.stats,
+          s.history,
+          typeof template === 'string' ? template : undefined,
+        ),
+      ),
+    ),
+    // The panel is the main surface; the QuickPick above stays as the fast path
+    // for when you already know the template and want it in four keystrokes.
+    vscode.commands.registerCommand('struktek.open', () => panel.show()),
+    vscode.commands.registerCommand('struktek.showTemplate', (template?: string) =>
+      panel.show(typeof template === 'string' ? template : undefined),
     ),
     vscode.commands.registerCommand('struktek.newTemplate', () =>
       withSession((s) => newTemplate(s.library)),
@@ -84,6 +109,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       withSession(async (s) => {
         await s.library.reload();
         tree.refresh();
+        panel.refresh();
       }),
     ),
     vscode.commands.registerCommand('struktek.seedLibrary', () =>
@@ -91,6 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const created = await seedLibrary(s.library.root);
         await s.library.reload();
         tree.refresh();
+        panel.refresh();
         if (!created) {
           void vscode.window.showInformationMessage(
             'Struktek: the library already exists — nothing was overwritten.',
@@ -126,6 +153,12 @@ export function deactivate(): void {
   closeSession();
 }
 
+function historyLimit(): number {
+  const raw = vscode.workspace.getConfiguration('struktek').get<number>('history.limit', 500);
+  // Hand-edited settings are not validated against the manifest, so clamp.
+  return Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 10000) : 500;
+}
+
 function applyLogLevel(): void {
   const level = vscode.workspace.getConfiguration('struktek').get<string>('logLevel', 'info');
   // VS Code does not enforce the manifest `enum` at read time — a hand-edited
@@ -150,7 +183,10 @@ async function openSession(): Promise<void> {
   const stats = new Stats(library.runtimeDir);
   await stats.load();
 
-  const current: Session = { library, stats, workspaceRoot: folder.uri.fsPath };
+  const history = new History(library.runtimeDir, historyLimit());
+  await history.load();
+
+  const current: Session = { library, stats, history, workspaceRoot: folder.uri.fsPath };
   session = current;
 
   // Slash commands are per-session registrations, so an edited library has to
@@ -159,8 +195,10 @@ async function openSession(): Promise<void> {
   library.onDidChange(() => {
     current.mcp?.refreshPrompts();
     refreshTree();
+    refreshPanel();
   });
   refreshTree();
+  refreshPanel();
 
   await startMcp(current, folder);
 }

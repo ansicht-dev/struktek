@@ -70,6 +70,11 @@
     ],
     "commands": [
       {
+        "command": "struktek.open",
+        "title": "Struktek: Open Panel",
+        "icon": "$(window)"
+      },
+      {
         "command": "struktek.compose",
         "title": "Struktek: Compose Prompt",
         "icon": "$(play)"
@@ -105,10 +110,19 @@
         "command": "struktek.configureMcp",
         "title": "Struktek: Configure MCP for Agent",
         "icon": "$(plug)"
+      },
+      {
+        "command": "struktek.showTemplate",
+        "title": "Struktek: Open Template in Panel"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "struktek.open",
+          "when": "view == struktek.library",
+          "group": "navigation@0"
+        },
         {
           "command": "struktek.newTemplate",
           "when": "view == struktek.library",
@@ -145,6 +159,10 @@
         {
           "command": "struktek.openBlock",
           "when": "false"
+        },
+        {
+          "command": "struktek.showTemplate",
+          "when": "false"
         }
       ]
     },
@@ -158,15 +176,17 @@
     "configuration": {
       "title": "Struktek",
       "properties": {
+        "struktek.history.limit": {
+          "type": "number",
+          "default": 500,
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "How many generated prompts to keep per workspace. Set 0 to keep none. Stored in .struktek/.runtime, which is git-ignored. Reload the window to apply."
+        },
         "struktek.libraryPath": {
           "type": "string",
           "default": ".struktek",
           "description": "Workspace-relative folder holding `templates/` and `blocks/`. Reload the window to apply."
-        },
-        "struktek.mcp.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run the MCP server so agents can list and compose your templates. Reload the window to apply."
         },
         "struktek.logLevel": {
           "type": "string",
@@ -183,7 +203,12 @@
             "Failures only."
           ],
           "default": "info",
-          "description": "Verbosity of the Struktek output channel. Takes effect immediately — no reload required."
+          "description": "Verbosity of the Struktek output channel. Takes effect immediately \u2014 no reload required."
+        },
+        "struktek.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the MCP server so agents can list and compose your templates. Reload the window to apply."
         }
       }
     }
@@ -198,7 +223,8 @@
     "test:watch": "vitest",
     "package": "npm run build:prod && npx --no-install @vscode/vsce package",
     "package:bridge": "node esbuild.mjs --prod && node scripts/build-bridge-package.mjs",
-    "install:local": "node scripts/install-local.mjs"
+    "install:local": "node scripts/install-local.mjs",
+    "lint:webview": "tsc -p tsconfig.webview.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -123,9 +123,11 @@ function templateItem(entry: TemplateEntry, stats: Stats | undefined): vscode.Tr
   item.tooltip = tooltipFor(model);
   item.resourceUri = entry.uri;
   item.contextValue = 'struktekTemplate';
+  // Opens the panel rather than the QuickPick chain: the tree is a launcher,
+  // and the panel is where composing actually happens now.
   item.command = {
-    command: 'struktek.compose',
-    title: 'Compose',
+    command: 'struktek.showTemplate',
+    title: 'Open in Struktek',
     arguments: [model.name],
   };
   return item;

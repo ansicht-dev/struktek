@@ -17,6 +17,7 @@ import type { Library, TemplateEntry } from './library';
 import { log } from './log';
 import { seedLibrary } from './seed';
 import type { Stats } from './stats';
+import type { History } from './history';
 
 /** Distinguishes "the user pressed Escape" from "this optional field is blank". */
 const CANCELLED = Symbol('cancelled');
@@ -30,6 +31,7 @@ type Answer = string | undefined | typeof CANCELLED;
 export async function composeCommand(
   library: Library,
   stats: Stats,
+  history: History,
   preselected?: string,
 ): Promise<void> {
   const entry = (preselected ? library.get(preselected) : undefined) ?? (await pickTemplate(library, stats));
@@ -45,7 +47,9 @@ export async function composeCommand(
   });
 
   stats.record(entry.model.name, values);
-  await deliver(result.text, entry.model, result.unfilled);
+  await deliver(result.text, entry.model, result.unfilled, (via) => {
+    history.record(entry.model.name, values, result.text, via);
+  });
 }
 
 async function pickTemplate(library: Library, stats: Stats): Promise<TemplateEntry | undefined> {
@@ -266,8 +270,15 @@ function firstLine(body: string): string {
 }
 
 /** Final step: where should the composed prompt go? */
-async function deliver(text: string, model: TemplateModel, unfilled: readonly string[]): Promise<void> {
+async function deliver(
+  text: string,
+  model: TemplateModel,
+  unfilled: readonly string[],
+  /** Called with where it went, once the user has actually chosen. */
+  onDelivered: (via: string) => void,
+): Promise<void> {
   interface Action extends vscode.QuickPickItem {
+    readonly via: string;
     readonly run: () => Promise<void>;
   }
 
@@ -275,10 +286,12 @@ async function deliver(text: string, model: TemplateModel, unfilled: readonly st
     {
       label: '$(comment-discussion) Send to Chat',
       description: 'prefill the chat box without submitting',
+      via: 'chat',
       run: () => sendToChat(text),
     },
     {
       label: '$(clippy) Copy to Clipboard',
+      via: 'clipboard',
       run: async () => {
         await vscode.env.clipboard.writeText(text);
         void vscode.window.showInformationMessage('Struktek: prompt copied.');
@@ -286,6 +299,7 @@ async function deliver(text: string, model: TemplateModel, unfilled: readonly st
     },
     {
       label: '$(edit) Insert at Cursor',
+      via: 'insert',
       run: async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -298,6 +312,7 @@ async function deliver(text: string, model: TemplateModel, unfilled: readonly st
     {
       label: '$(go-to-file) Open in Editor',
       description: 'review or tweak before sending',
+      via: 'editor',
       run: async () => {
         const doc = await vscode.workspace.openTextDocument({ content: text, language: 'markdown' });
         await vscode.window.showTextDocument(doc, { preview: true });
@@ -313,7 +328,11 @@ async function deliver(text: string, model: TemplateModel, unfilled: readonly st
         : preview(text),
     ignoreFocusOut: true,
   });
-  await picked?.run();
+  if (!picked) return;
+  // Recorded only once a destination is chosen: a prompt you abandoned at the
+  // delivery step is not one you generated.
+  onDelivered(picked.via);
+  await picked.run();
 }
 
 /**
