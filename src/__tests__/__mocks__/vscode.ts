@@ -10,6 +10,9 @@
  * should fail loudly in the test that needs it, and get added deliberately.
  */
 
+import * as nodeFs from 'node:fs/promises';
+import * as nodePath from 'node:path';
+
 export class Uri {
   private constructor(
     readonly scheme: string,
@@ -102,15 +105,35 @@ export const workspace = {
   findFiles: async (): Promise<Uri[]> => [],
   openTextDocument: async (): Promise<undefined> => undefined,
   asRelativePath: (value: unknown): string => String(value),
+  /**
+   * Backed by the real filesystem, not stubbed out.
+   *
+   * Stats and history exist to survive a reload, and a stub that swallows every
+   * write would let a broken round-trip pass. Tests point these at a temp
+   * directory and assert the bytes actually came back.
+   */
   fs: {
-    readFile: async (): Promise<Uint8Array> => {
-      throw new Error('vscode.workspace.fs.readFile is not stubbed for this test');
+    readFile: async (uri: Uri): Promise<Uint8Array> => nodeFs.readFile(uri.fsPath),
+    writeFile: async (uri: Uri, content: Uint8Array): Promise<void> => {
+      await nodeFs.mkdir(nodePath.dirname(uri.fsPath), { recursive: true });
+      await nodeFs.writeFile(uri.fsPath, content);
     },
-    writeFile: async (): Promise<void> => undefined,
-    readDirectory: async (): Promise<[string, FileType][]> => [],
-    createDirectory: async (): Promise<void> => undefined,
-    stat: async (): Promise<never> => {
-      throw new Error('not found');
+    readDirectory: async (uri: Uri): Promise<[string, FileType][]> => {
+      const entries = await nodeFs.readdir(uri.fsPath, { withFileTypes: true });
+      return entries.map((entry) => [
+        entry.name,
+        entry.isDirectory() ? FileType.Directory : FileType.File,
+      ]);
+    },
+    createDirectory: async (uri: Uri): Promise<void> => {
+      await nodeFs.mkdir(uri.fsPath, { recursive: true });
+    },
+    delete: async (uri: Uri, options?: { recursive?: boolean }): Promise<void> => {
+      await nodeFs.rm(uri.fsPath, { recursive: options?.recursive ?? false, force: true });
+    },
+    stat: async (uri: Uri): Promise<{ type: FileType; size: number }> => {
+      const stat = await nodeFs.stat(uri.fsPath);
+      return { type: stat.isDirectory() ? FileType.Directory : FileType.File, size: stat.size };
     },
   },
 };
