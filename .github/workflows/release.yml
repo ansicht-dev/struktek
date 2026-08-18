@@ -1,0 +1,143 @@
+name: Release
+
+# Tag-driven. `package.json` is the single source of truth for the version, and
+# the tag must be `v<that version>` — the build refuses to publish a mismatch
+# rather than shipping something labelled wrong.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      vsix: ${{ steps.meta.outputs.vsix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: derive version and check the tag agrees
+        id: meta
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "vsix=struktek-$version.vsix" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "v$version" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match package.json version $version"
+            exit 1
+          fi
+
+      # The same gates as CI. A tag is not a reason to skip them.
+      - run: npm run lint
+      - run: npm run lint:tests
+      - run: npm run lint:webview
+      - run: npm test
+
+      - run: npm run package
+      - run: npm run package:bridge
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: ${{ steps.meta.outputs.vsix }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge
+          path: dist-bridge/
+          if-no-files-found: error
+
+  npm:
+    name: publish @struktek/mcp-bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    permissions:
+      contents: read
+      # Trusted Publishing: npm mints a short-lived credential from this token,
+      # so there is no NPM_TOKEN to leak, rotate, or forget to revoke.
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Node 22 ships npm 10.x; OIDC needs >= 11.5.1. Pinned to the 11 line
+      # rather than @latest so a release is reproducible.
+      - run: npm install -g npm@^11.5.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge
+          path: dist-bridge
+      - run: npm publish
+        working-directory: dist-bridge
+
+  marketplace:
+    name: publish to the marketplace
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      # Publishes the artifact the build produced rather than repackaging, so
+      # the marketplace and the GitHub release are byte-identical.
+      - run: npx --no-install @vscode/vsce publish --packagePath "${{ needs.build.outputs.vsix }}"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  github-release:
+    name: github release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build, npm, marketplace]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+
+      - name: slice the changelog for this version
+        id: notes
+        run: |
+          version="${{ needs.build.outputs.version }}"
+          # Literal prefix matching, not a regex. `$0 ~ "## [" v "]"` looks
+          # right and is not: awk reads the brackets as a character class, so it
+          # silently matches nothing and every release ships empty notes.
+          awk -v hdr="## [$version]" '
+            index($0, hdr) == 1 {found = 1; next}
+            found && index($0, "## [") == 1 {exit}
+            found {print}
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "Struktek $version." > notes.md
+          fi
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.build.outputs.version }}"
+          gh release create "v$version" \
+            --title "v$version" \
+            --notes-file notes.md \
+            "${{ needs.build.outputs.vsix }}"

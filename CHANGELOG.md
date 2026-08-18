@@ -18,8 +18,18 @@ to an agent.
 - **Composer.** `Ctrl+Shift+K` walks a QuickPick per field, then sends to chat,
   copies, inserts at the cursor, or opens in an editor. Last-used values return
   on the next run.
-- **Activity-bar view.** Templates in use order, composing on click, with their
-  fields on hover. Blocks browsable underneath.
+- **Panel.** A library of cards with description, tags, use count and last-used,
+  searchable and filterable by tag. Opening one gives the compose form beside a
+  **live preview** that updates as you type — the same renderer an agent gets,
+  running in the frame, so the two cannot drift.
+- **History.** Every prompt you generate is kept, with its timestamp and the
+  values behind it. Reread one, copy it, or reuse its values and change a single
+  input instead of retyping all of them. Stored per workspace in
+  `.struktek/.runtime`, which is git-ignored.
+- **Tags.** `tags: [review, quality]` in frontmatter, for filtering a library
+  once it outgrows a single screen.
+- **Activity-bar view.** Templates in use order as a launcher into the panel,
+  with their fields on hover. Blocks browsable underneath.
 - **MCP.** Templates are served both as prompts — slash commands like
   `/mcp__struktek__code-review` — and as tools, so an agent can pick a template
   itself when composing for a subagent. `Struktek: Configure MCP for Agent`
