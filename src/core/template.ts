@@ -76,6 +76,7 @@ function coerceFrontmatter(raw: unknown): Frontmatter | undefined {
   const record = raw as Record<string, unknown>;
   const name = typeof record['name'] === 'string' ? record['name'] : undefined;
   const description = typeof record['description'] === 'string' ? record['description'] : undefined;
+  const tags = coerceTags(record['tags']);
 
   let args: Record<string, { type?: string; description?: string; default?: string }> | undefined;
   const rawArgs = record['args'];
@@ -106,10 +107,35 @@ function coerceFrontmatter(raw: unknown): Frontmatter | undefined {
     }
   }
 
-  if (!name && !description && !args) return undefined;
+  if (!name && !description && !args && !tags) return undefined;
   return {
     ...(name ? { name } : {}),
     ...(description ? { description } : {}),
+    ...(tags ? { tags } : {}),
     ...(args ? { args } : {}),
   };
+}
+
+/**
+ * Accept tags as a YAML list or a comma-separated string.
+ *
+ * `tags: [review, quality]` and `tags: review, quality` both read naturally to
+ * someone typing frontmatter by hand, and rejecting either would be a papercut
+ * with no upside. Values are lowercased and de-duplicated so `Review` and
+ * `review` do not become two entries in the library's filter list.
+ */
+function coerceTags(raw: unknown): readonly string[] | undefined {
+  const parts =
+    typeof raw === 'string'
+      ? raw.split(',')
+      : Array.isArray(raw)
+        ? raw.filter((value): value is string => typeof value === 'string')
+        : undefined;
+  if (!parts) return undefined;
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const tag = part.trim().toLowerCase();
+    if (tag.length > 0) seen.add(tag);
+  }
+  return seen.size > 0 ? [...seen] : undefined;
 }

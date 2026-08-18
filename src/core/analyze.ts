@@ -111,6 +111,7 @@ export function analyze(parsed: ParseResult, opts: AnalyzeOptions): TemplateMode
   return {
     name,
     ...(description ? { description } : {}),
+    tags: opts.frontmatter?.tags ?? [],
     fields,
     nodes: parsed.nodes,
     diagnostics,

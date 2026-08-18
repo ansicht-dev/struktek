@@ -112,6 +112,8 @@ export interface FrontmatterArg {
 export interface Frontmatter {
   readonly name?: string;
   readonly description?: string;
+  /** Free-form labels for grouping and filtering the library. */
+  readonly tags?: readonly string[];
   readonly args?: Readonly<Record<string, FrontmatterArg | string>>;
 }
 
@@ -119,6 +121,7 @@ export interface Frontmatter {
 export interface TemplateModel {
   readonly name: string;
   readonly description?: string;
+  readonly tags: readonly string[];
   readonly fields: readonly Field[];
   readonly nodes: readonly Node[];
   readonly diagnostics: readonly Diagnostic[];
