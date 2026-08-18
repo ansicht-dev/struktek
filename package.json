@@ -1,0 +1,195 @@
+{
+  "name": "struktek",
+  "displayName": "Struktek",
+  "description": "Never forget a good prompt. Compose reusable prompt templates with typed fields, and hand them to your agent.",
+  "version": "0.1.0",
+  "publisher": "ansicht",
+  "homepage": "https://ansicht.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ansicht-dev/struktek.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ansicht-dev/struktek/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "icon": "assets/struktek.png",
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "struktek",
+          "title": "Struktek",
+          "icon": "assets/struktek-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "struktek": [
+        {
+          "id": "struktek.library",
+          "name": "Templates"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "struktek.library",
+        "contents": "No templates yet. Struktek keeps them in `.struktek/templates`.\n[Create Starter Templates](command:struktek.seedLibrary)\n[New Blank Template](command:struktek.newTemplate)\n\nAlready have templates elsewhere? Point `struktek.libraryPath` at them."
+      }
+    ],
+    "commands": [
+      {
+        "command": "struktek.compose",
+        "title": "Struktek: Compose Prompt",
+        "icon": "$(play)"
+      },
+      {
+        "command": "struktek.newTemplate",
+        "title": "Struktek: New Template",
+        "icon": "$(add)"
+      },
+      {
+        "command": "struktek.openLibrary",
+        "title": "Struktek: Open Template Library"
+      },
+      {
+        "command": "struktek.openTemplate",
+        "title": "Struktek: Open Template File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "struktek.openBlock",
+        "title": "Struktek: Open Block File"
+      },
+      {
+        "command": "struktek.refreshLibrary",
+        "title": "Struktek: Refresh Library",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "struktek.seedLibrary",
+        "title": "Struktek: Create Starter Templates"
+      },
+      {
+        "command": "struktek.configureMcp",
+        "title": "Struktek: Configure MCP for Agent",
+        "icon": "$(plug)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "struktek.newTemplate",
+          "when": "view == struktek.library",
+          "group": "navigation@1"
+        },
+        {
+          "command": "struktek.refreshLibrary",
+          "when": "view == struktek.library",
+          "group": "navigation@2"
+        },
+        {
+          "command": "struktek.configureMcp",
+          "when": "view == struktek.library",
+          "group": "1_struktek@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "struktek.compose",
+          "when": "view == struktek.library && viewItem == struktekTemplate",
+          "group": "inline@1"
+        },
+        {
+          "command": "struktek.openTemplate",
+          "when": "view == struktek.library && viewItem == struktekTemplate",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "struktek.openTemplate",
+          "when": "false"
+        },
+        {
+          "command": "struktek.openBlock",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "struktek.compose",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      }
+    ],
+    "configuration": {
+      "title": "Struktek",
+      "properties": {
+        "struktek.libraryPath": {
+          "type": "string",
+          "default": ".struktek",
+          "description": "Workspace-relative folder holding `templates/` and `blocks/`. Reload the window to apply."
+        },
+        "struktek.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the MCP server so agents can list and compose your templates. Reload the window to apply."
+        },
+        "struktek.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Everything, including per-parse detail.",
+            "Normal operation.",
+            "Problems that did not stop the operation.",
+            "Failures only."
+          ],
+          "default": "info",
+          "description": "Verbosity of the Struktek output channel. Takes effect immediately — no reload required."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "build:prod": "node esbuild.mjs --prod",
+    "watch": "node esbuild.mjs --watch",
+    "lint": "tsc --noEmit",
+    "lint:tests": "tsc -p tsconfig.tests.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "npm run build:prod && npx --no-install @vscode/vsce package",
+    "package:bridge": "node esbuild.mjs --prod && node scripts/build-bridge-package.mjs",
+    "install:local": "node scripts/install-local.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

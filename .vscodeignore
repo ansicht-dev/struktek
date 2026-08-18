@@ -1,0 +1,34 @@
+# What NOT to ship in the .vsix.
+#
+# CRITICAL: vsce stops honouring .gitignore the moment this file exists, so
+# anything gitignored still ships unless it is listed here. Check with
+# `npx vsce ls` — `git status` cannot see into an ignored directory.
+#
+# Everything the extension needs at runtime is bundled by esbuild into
+# out/extension.js, so no source and no node_modules are required.
+
+src/**
+webview/**
+scripts/**
+test-fixtures/**
+node_modules/**
+.vscode/**
+.vscode-test/**
+.github/**
+.claude/**
+dist-bridge/**
+
+tsconfig*.json
+vitest*.config.ts
+esbuild.mjs
+*.vsix
+
+# Source maps are the easiest path back to readable source — never ship them.
+out/**/*.map
+**/*.map
+
+# The bridge ships as an npm package launched via npx, not inside the .vsix.
+out/mcp-bridge.js
+
+# Per-session runtime state, if a library was ever seeded in this repo.
+.struktek/.runtime/**

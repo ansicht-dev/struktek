@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "outDir": "out",
+    "rootDir": "src",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    // The MCP SDK is `exports`-only ESM with no legacy `main`/`types`, so classic
+    // `moduleResolution: node` cannot resolve its subpaths at type-check time.
+    // esbuild and vitest honour `exports` natively — this shim is for `tsc` only,
+    // deliberately localised rather than a global moduleResolution change.
+    "paths": {
+      "@modelcontextprotocol/sdk/*": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/__tests__/**", "node_modules"]
+}

@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist-bridge/
+*.vsix
+coverage/
+.vscode-test/
+.vscode/settings.json
+
+# Per-session MCP runtime state — carries a bearer token, never commit.
+# NOTE: only `.runtime/` is ignored. `.struktek/templates/` and `.struktek/blocks/`
+# are the product's content and MUST stay tracked.
+.struktek/.runtime/
+
+.claude/*
+!.claude/agents/
+!.claude/commands/
