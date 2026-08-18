@@ -1,6 +1,14 @@
-# Struktek
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ansicht-dev/struktek/master/assets/struktek.png" alt="Struktek" width="104" height="104">
+</p>
 
-**Never forget a good prompt.**
+<h1 align="center">Struktek</h1>
+
+<p align="center"><strong>Never forget a good prompt.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/ansicht-dev/struktek/actions/workflows/ci.yml"><img src="https://github.com/ansicht-dev/struktek/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
 Instead of retyping a good prompt from memory or digging it out of a transcript,
 compose it from a template with typed fields — then hand it to your agent.
