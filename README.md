@@ -133,7 +133,24 @@ npm run package:bridge # build the publishable npm bridge
 | `struktek.logLevel` | `info` | verbosity of the Struktek output channel |
 
 `F5` launches an Extension Development Host on `test-fixtures/workspace`.
+`npm run install:local` packages the `.vsix` and installs it into every editor
+CLI it finds — VS Code, VSCodium, Insiders, Cursor, Windsurf.
 
 The parser lives in [`src/core/`](src/core/) and imports nothing — no `vscode`,
 no `node:*`. Filesystem and YAML access are injected, so the extension host, the
 MCP bridge, and any future webview all run the same code.
+
+## Status and licence
+
+Pre-release (`0.1.0`) and shaped by daily use, so expect the format to move
+before `1.0`.
+
+The source is public to read, review, and learn from. It is **not** open
+source: struktek is proprietary, all rights reserved — see
+[LICENSE.txt](LICENSE.txt). Your templates and blocks are entirely yours; the
+licence claims nothing over anything you author with it.
+
+Bug reports and ideas are welcome in [issues][issues]. Security issues should
+go through [SECURITY.md](SECURITY.md) rather than a public issue.
+
+[issues]: https://github.com/ansicht-dev/struktek/issues
