@@ -21,7 +21,13 @@ dist-bridge/**
 tsconfig*.json
 vitest*.config.ts
 esbuild.mjs
+cliff.toml
 *.vsix
+
+# Repo hygiene that means nothing to an installed extension.
+.gitignore
+.gitattributes
+SECURITY.md
 
 # Source maps are the easiest path back to readable source — never ship them.
 out/**/*.map
@@ -30,5 +36,8 @@ out/**/*.map
 # The bridge ships as an npm package launched via npx, not inside the .vsix.
 out/mcp-bridge.js
 
-# Per-session runtime state, if a library was ever seeded in this repo.
-.struktek/.runtime/**
+# This repo's OWN template library — struktek uses struktek, but that library is
+# dogfooding content, not product. Shipping it would drop someone else's
+# templates into their .vsix. (The starter library users get is generated from
+# src/host/seedContent.ts, not copied from here.)
+.struktek/**
