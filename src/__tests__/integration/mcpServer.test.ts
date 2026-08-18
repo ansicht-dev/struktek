@@ -11,7 +11,7 @@
  * committable.
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -170,6 +170,32 @@ describe('the MCP surface over HTTP', () => {
     const client = await connect((await readDiscovery()).token);
     expect(client.getServerVersion()).toMatchObject({ name: 'struktek', version: '9.9.9' });
     await client.close();
+  });
+});
+
+describe('two windows on one folder', () => {
+  it('does not delete a discovery file another window owns', async () => {
+    // Window B started after us and took ownership of the shared path.
+    const theirs: DiscoveryDocument = {
+      ...(await readDiscovery()),
+      pid: process.pid + 1,
+      url: 'http://127.0.0.1:1/mcp',
+    };
+    await writeFile(discoveryFilePath(workspace), JSON.stringify(theirs), 'utf8');
+
+    // Closing THIS window must leave their file alone — their server is still
+    // listening, and removing it would make it undiscoverable.
+    await host.close();
+
+    expect(existsSync(discoveryFilePath(workspace))).toBe(true);
+    const after = await readDiscovery();
+    expect(after.pid).toBe(process.pid + 1);
+  });
+
+  it('still deletes its own file', async () => {
+    expect((await readDiscovery()).pid).toBe(process.pid);
+    await host.close();
+    expect(existsSync(discoveryFilePath(workspace))).toBe(false);
   });
 });
 

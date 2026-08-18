@@ -225,9 +225,26 @@ export class McpServerHost {
     await fs.writeFile(file, JSON.stringify(document, null, 2) + '\n', 'utf8');
   }
 
+  /**
+   * Remove the discovery file, but only if it is still ours.
+   *
+   * Two windows on the same folder share one discovery path, and the last to
+   * start owns it. Deleting unconditionally meant closing EITHER window made
+   * the other undiscoverable while its server was still listening — the agent
+   * would quietly drop to offline mode with a perfectly good host running.
+   */
   private async deleteDiscovery(): Promise<void> {
+    const file = discoveryFilePath(this.context.workspaceRoot);
     try {
-      await fs.unlink(discoveryFilePath(this.context.workspaceRoot));
+      const raw = await fs.readFile(file, 'utf8');
+      const owner = (JSON.parse(raw) as Partial<DiscoveryDocument>).pid;
+      // Unparseable or PID-less: ours by default, since nothing else claims it.
+      if (typeof owner === 'number' && owner !== process.pid) return;
+    } catch {
+      // Absent, or unreadable — fall through and try the unlink anyway.
+    }
+    try {
+      await fs.unlink(file);
     } catch {
       // Never written, or already gone — either way there is nothing to do.
     }
