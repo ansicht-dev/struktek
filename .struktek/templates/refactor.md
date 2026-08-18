@@ -1,6 +1,7 @@
 ---
 name: refactor
 description: Restructure code without changing behaviour
+tags: [change, quality]
 ---
 Refactor {{ target: file }} to {{ goal "the property you want, e.g. remove the duplicated parsing" }}.
 

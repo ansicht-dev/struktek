@@ -1,6 +1,7 @@
 ---
 name: debug
 description: Investigate a failure from a symptom
+tags: [fix, debug]
 ---
 Something is wrong: {{ symptom: block "what you observe going wrong" }}
 

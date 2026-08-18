@@ -1,6 +1,7 @@
 ---
 name: code-review
 description: Review a file for a specific class of problem
+tags: [review, quality]
 ---
 Review {{ target: file "path to the file under review" }} for {{ focus: choice[correctness, performance, security, readability] }}.
 

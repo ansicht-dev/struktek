@@ -1,6 +1,7 @@
 ---
 name: explain
 description: Explain code or a concept at a chosen level
+tags: [understand]
 ---
 Explain {{ subject "what to explain — a file, symbol, or concept" }} to {{ audience: choice[a new teammate, someone outside engineering, my future self] }}.
 
