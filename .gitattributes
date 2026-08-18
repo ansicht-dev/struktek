@@ -1,0 +1,8 @@
+# Normalise line endings so a Windows checkout does not turn every file into a
+# CRLF diff for the next machine. LF in the repository, native in the checkout.
+* text=auto eol=lf
+
+# Binary — never diffed, never normalised.
+*.png binary
+*.ico binary
+*.vsix binary
