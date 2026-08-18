@@ -2,6 +2,19 @@
   "name": "struktek",
   "displayName": "Struktek",
   "description": "Never forget a good prompt. Compose reusable prompt templates with typed fields, and hand them to your agent.",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "keywords": [
+    "prompt",
+    "prompt engineering",
+    "prompt template",
+    "mcp",
+    "model context protocol",
+    "claude",
+    "copilot",
+    "codex",
+    "ai",
+    "agent"
+  ],
   "version": "0.1.0",
   "publisher": "ansicht",
   "homepage": "https://ansicht.dev",
@@ -16,7 +29,15 @@
     "vscode": "^1.85.0"
   },
   "icon": "assets/struktek.png",
+  "galleryBanner": {
+    "color": "#1B1B20",
+    "theme": "dark"
+  },
+  "preview": true,
   "categories": [
+    "AI",
+    "Chat",
+    "Snippets",
     "Other"
   ],
   "activationEvents": [
