@@ -80,7 +80,24 @@ jobs:
         with:
           name: bridge
           path: dist-bridge
-      - run: npm publish
+
+      # A version can only be published once. Without this, any re-run after a
+      # partial failure — a marketplace hiccup, an expired PAT — dies here
+      # instead of finishing the release.
+      - name: is this version already on the registry
+        id: check
+        working-directory: dist-bridge
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "@struktek/mcp-bridge@$version" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::@struktek/mcp-bridge@$version is already published — skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.published == 'false'
+        run: npm publish
         working-directory: dist-bridge
 
   marketplace:
