@@ -17,6 +17,13 @@ Built by [Ansicht](https://ansicht.dev).
 
 ---
 
+## Install
+
+Struktek is published on the [Open VSX Registry][ovsx], so it installs in
+VS Code, VSCodium, Cursor, Windsurf, and anything else that uses Open VSX.
+
+[ovsx]: https://open-vsx.org/extension/ansicht/struktek
+
 ## The format
 
 A template is a markdown file. Three constructs in the body, nothing else:

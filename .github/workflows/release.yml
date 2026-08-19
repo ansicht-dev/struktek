@@ -82,7 +82,7 @@ jobs:
           path: dist-bridge
 
       # A version can only be published once. Without this, any re-run after a
-      # partial failure — a marketplace hiccup, an expired PAT — dies here
+      # partial failure — an Open VSX hiccup, an expired PAT — dies here
       # instead of finishing the release.
       - name: is this version already on the registry
         id: check
@@ -100,8 +100,8 @@ jobs:
         run: npm publish
         working-directory: dist-bridge
 
-  marketplace:
-    name: publish to the marketplace
+  open-vsx:
+    name: publish to open vsx
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
@@ -115,17 +115,25 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: vsix
-      # Publishes the artifact the build produced rather than repackaging, so
-      # the marketplace and the GitHub release are byte-identical.
-      - run: npx --no-install @vscode/vsce publish --packagePath "${{ needs.build.outputs.vsix }}"
+
+      # The namespace is created automatically on first publish; this is a
+      # safety net, and idempotent, so a re-run does not fail on "already exists".
+      - name: ensure the namespace exists
+        run: npx --no-install ovsx create-namespace ansicht || true
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      # Publishes the artifact the build produced rather than repackaging, so
+      # Open VSX and the GitHub release are byte-identical.
+      - run: npx --no-install ovsx publish "${{ needs.build.outputs.vsix }}"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
   github-release:
     name: github release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build, npm, marketplace]
+    needs: [build, npm, open-vsx]
     permissions:
       contents: write
     steps:

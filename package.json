@@ -203,7 +203,7 @@
             "Failures only."
           ],
           "default": "info",
-          "description": "Verbosity of the Struktek output channel. Takes effect immediately \u2014 no reload required."
+          "description": "Verbosity of the Struktek output channel. Takes effect immediately — no reload required."
         },
         "struktek.mcp.enabled": {
           "type": "boolean",
@@ -236,6 +236,7 @@
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.24.0",
+    "ovsx": "^1.1.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
