@@ -114,6 +114,8 @@ export interface Frontmatter {
   readonly description?: string;
   /** Free-form labels for grouping and filtering the library. */
   readonly tags?: readonly string[];
+  /** Commentary about the template itself, never rendered into the prompt. */
+  readonly note?: string;
   readonly args?: Readonly<Record<string, FrontmatterArg | string>>;
 }
 
@@ -122,7 +124,24 @@ export interface TemplateModel {
   readonly name: string;
   readonly description?: string;
   readonly tags: readonly string[];
+  readonly note?: string;
   readonly fields: readonly Field[];
   readonly nodes: readonly Node[];
   readonly diagnostics: readonly Diagnostic[];
+}
+
+/**
+ * A block instance's optional header.
+ *
+ * Blocks began as bare bodies and most still are, so every field here is
+ * absent by default and the library falls back to the filename and the body's
+ * first line. The header exists so a block can be described and tagged in the
+ * same vocabulary as a template — it is stripped before the body is rendered,
+ * so adding one never changes what a prompt says.
+ */
+export interface BlockMeta {
+  readonly title?: string;
+  readonly description?: string;
+  readonly tags: readonly string[];
+  readonly note?: string;
 }

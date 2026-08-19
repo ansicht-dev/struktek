@@ -108,10 +108,12 @@ export function analyze(parsed: ParseResult, opts: AnalyzeOptions): TemplateMode
 
   const name = opts.frontmatter?.name ?? opts.name;
   const description = opts.frontmatter?.description;
+  const note = opts.frontmatter?.note;
   return {
     name,
     ...(description ? { description } : {}),
     tags: opts.frontmatter?.tags ?? [],
+    ...(note ? { note } : {}),
     fields,
     nodes: parsed.nodes,
     diagnostics,

@@ -136,3 +136,27 @@ describe('loadTemplate', () => {
     expect(model.fields.map((f) => f.name)).toEqual(['a']);
   });
 });
+
+describe('note', () => {
+  it('reaches the model without reaching the prompt', () => {
+    const model = load('---\nnote: Only use this on files you own\n---\nReview {{ target }}');
+    expect(model.note).toBe('Only use this on files you own');
+    // The whole point of `note`: it is commentary for whoever picks the
+    // template, and must never leak into what the agent is sent.
+    const text = render(model.nodes, { values: { target: 'a.ts' }, fields: model.fields }).text;
+    expect(text).toBe('Review a.ts');
+  });
+
+  it('is absent rather than empty when not given', () => {
+    expect(load('body {{ a }}').note).toBeUndefined();
+    expect(load('---\nname: x\n---\nbody {{ a }}').note).toBeUndefined();
+  });
+
+  it('is enough on its own to count as frontmatter', () => {
+    // `coerceFrontmatter` returns undefined when every key it honours is
+    // missing; a header carrying only a note must still survive that check.
+    expect(splitFrontmatter('---\nnote: careful\n---\nbody', parseYaml).frontmatter).toEqual({
+      note: 'careful',
+    });
+  });
+});

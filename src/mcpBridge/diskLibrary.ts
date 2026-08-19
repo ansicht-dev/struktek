@@ -19,7 +19,9 @@ import { parse as parseYaml } from 'yaml';
 import {
   EMPTY_BLOCK_LIBRARY,
   loadTemplate,
+  readBlockFile,
   type BlockLibrary,
+  type BlockMeta,
   type TemplateModel,
 } from '../core';
 
@@ -60,21 +62,31 @@ export class DiskLibrary {
   private readBlocks(): BlockLibrary {
     const root = path.join(this.options.root, 'blocks');
     const bodies = new Map<string, Map<string, string>>();
+    const meta = new Map<string, Map<string, BlockMeta>>();
     const names = new Map<string, readonly string[]>();
 
     for (const type of listDirectories(root)) {
       const forType = new Map<string, string>();
+      const metaForType = new Map<string, BlockMeta>();
       for (const filename of listTextFiles(path.join(root, type))) {
         try {
-          forType.set(stem(filename), fs.readFileSync(path.join(root, type, filename), 'utf8'));
+          // Through the same splitter the extension host uses, so a block with
+          // a header renders identically whether VS Code is running or not.
+          const file = readBlockFile(
+            fs.readFileSync(path.join(root, type, filename), 'utf8'),
+            parseYaml,
+          );
+          forType.set(stem(filename), file.body);
+          if (file.meta) metaForType.set(stem(filename), file.meta);
         } catch {
           // One unreadable instance must not take the type offline.
         }
       }
       bodies.set(type, forType);
+      meta.set(type, metaForType);
       names.set(type, [...forType.keys()]);
     }
-    return { bodies, names };
+    return { bodies, meta, names };
   }
 
   private readTemplates(blocks: BlockLibrary): readonly TemplateModel[] {

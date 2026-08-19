@@ -186,7 +186,7 @@ export class Library implements vscode.Disposable {
       },
     };
 
-    return loadBlocks(reader);
+    return loadBlocks(reader, { parseYaml });
   }
 }
 

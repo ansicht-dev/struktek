@@ -95,11 +95,24 @@ export const TEMPLATES: readonly SeedFile[] = [
 export const BLOCKS: readonly SeedFile[] = [
   {
     path: [BLOCKS_DIR, 'output-format', 'prose.md'],
-    body: 'Answer in prose. No bullet lists unless the content is genuinely a list.\n',
+    body: [
+      '---',
+      'title: Prose',
+      'description: Flowing paragraphs, no bullets',
+      'tags: [writing]',
+      '---',
+      'Answer in prose. No bullet lists unless the content is genuinely a list.',
+      '',
+    ].join('\n'),
   },
   {
     path: [BLOCKS_DIR, 'output-format', 'json-strict.md'],
     body: [
+      '---',
+      'title: Strict JSON',
+      'description: Machine-readable, nothing else',
+      'tags: [machine]',
+      '---',
       'Reply with JSON only — no prose, no code fence, no commentary.',
       'If a value is unknown use null rather than omitting the key.',
       '',
@@ -108,6 +121,11 @@ export const BLOCKS: readonly SeedFile[] = [
   {
     path: [BLOCKS_DIR, 'output-format', 'markdown-table.md'],
     body: [
+      '---',
+      'title: Markdown table',
+      'description: One row per item, scannable',
+      'tags: [writing]',
+      '---',
       'Reply as a markdown table. Put the most important column first.',
       'Keep cells short enough to scan; move detail into a note under the table.',
       '',
@@ -115,11 +133,24 @@ export const BLOCKS: readonly SeedFile[] = [
   },
   {
     path: [BLOCKS_DIR, 'depth', 'quick.md'],
-    body: 'shallow — flag anything obvious and stop. Do not read beyond what you need.\n',
+    body: [
+      '---',
+      'title: Quick',
+      'description: A first pass, cheap and shallow',
+      'tags: [fast]',
+      '---',
+      'shallow — flag anything obvious and stop. Do not read beyond what you need.',
+      '',
+    ].join('\n'),
   },
   {
     path: [BLOCKS_DIR, 'depth', 'thorough.md'],
     body: [
+      '---',
+      'title: Thorough',
+      'description: Follow the call sites and the edge cases',
+      'tags: [careful]',
+      '---',
       'deep — read the surrounding code, follow the call sites, and check the edge cases.',
       'Say explicitly what you did not look at.',
       '',
@@ -134,6 +165,7 @@ export function newTemplateBody(name: string): string {
     'name: ' + name,
     'description: ',
     'tags: []',
+    'note: ',
     '---',
     'Write the prompt here. Mark the parts that change with {{ field }}.',
     '',
@@ -141,6 +173,27 @@ export function newTemplateBody(name: string): string {
     'or a block type of your own: {{ format: output-format }}.',
     '',
     '[Wrap anything conditional in brackets - this line vanishes when {{ extra }} is blank.]',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The body a brand-new block instance starts from.
+ *
+ * The header is optional everywhere else, but a new file gets one so the
+ * feature is visible the moment you make a block rather than only in the docs.
+ * Everything below the fence is what actually lands in the prompt.
+ */
+export function newBlockBody(type: string, name: string): string {
+  return [
+    '---',
+    'title: ' + name,
+    'description: ',
+    'tags: []',
+    'note: ',
+    '---',
+    'Write what this ' + type + ' actually says. The whole body below the',
+    'fence is substituted wherever a {{ field: ' + type + ' }} picks it.',
     '',
   ].join('\n');
 }

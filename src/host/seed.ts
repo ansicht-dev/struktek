@@ -11,7 +11,7 @@ import { log } from './log';
 import { TEMPLATES_DIR } from './paths';
 import { BLOCKS, TEMPLATES } from './seedContent';
 
-export { newTemplateBody } from './seedContent';
+export { newBlockBody, newTemplateBody } from './seedContent';
 
 /**
  * Create the starter library if the root has no `templates/` yet.

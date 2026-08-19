@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import { loadTemplate, render } from '../../core';
+import { loadTemplate, readBlockFile, render } from '../../core';
 import { BLOCKS, newTemplateBody, TEMPLATES } from '../../host/seedContent';
 
 /** Rebuild the block library the way the loader would, from the seed paths. */
@@ -25,7 +25,10 @@ function seededBlocks(): {
     if (!type || !filename) throw new Error('A seeded block needs blocks/<type>/<instance>');
     const instance = filename.replace(/\.[^.]+$/, '');
     (names.get(type) ?? names.set(type, []).get(type)!).push(instance);
-    (bodies.get(type) ?? bodies.set(type, new Map()).get(type)!).set(instance, block.body);
+    // Through the real splitter: a seeded block carries a header, and what
+    // renders is only what sits below it.
+    const file = readBlockFile(block.body, parseYaml);
+    (bodies.get(type) ?? bodies.set(type, new Map()).get(type)!).set(instance, file.body);
   }
   return { names, bodies };
 }

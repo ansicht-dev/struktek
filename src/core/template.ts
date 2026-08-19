@@ -20,24 +20,43 @@ export interface SplitTemplate {
   readonly bodyOffset: number;
 }
 
-const FRONTMATTER = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+/** A split with the header still as raw YAML text — nothing interpreted yet. */
+export interface SplitDocument {
+  /** The text between the fences, absent when the file has no header. */
+  readonly yaml?: string;
+  readonly body: string;
+  readonly bodyOffset: number;
+}
+
+const FRONTMATTER = /^\ufeff?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 /**
- * Split leading `--- ... ---` frontmatter off the body.
+ * Split leading `--- ... ---` off the body, without interpreting it.
+ *
+ * Templates and blocks share the fence but not the vocabulary inside it, so the
+ * split and the coercion are separate steps — each caller narrows the YAML to
+ * the keys it honours.
  *
  * `bodyOffset` is why this returns a struct rather than a tuple: every span the
  * parser produces is an offset into the ORIGINAL file, so an editor can put a
  * squiggle on the right character without the caller re-deriving the shift.
  */
-export function splitFrontmatter(source: string, parseYaml: YamlParser): SplitTemplate {
+export function splitDocument(source: string): SplitDocument {
   const match = FRONTMATTER.exec(source);
   if (!match) return { body: source, bodyOffset: 0 };
   const bodyOffset = match[0].length;
-  const frontmatter = coerceFrontmatter(parseYaml(match[1] ?? ''));
+  return { yaml: match[1] ?? '', body: source.slice(bodyOffset), bodyOffset };
+}
+
+/** Split, then narrow the header to the keys a template honours. */
+export function splitFrontmatter(source: string, parseYaml: YamlParser): SplitTemplate {
+  const split = splitDocument(source);
+  if (split.yaml === undefined) return { body: split.body, bodyOffset: split.bodyOffset };
+  const frontmatter = coerceFrontmatter(parseYaml(split.yaml));
   return {
     ...(frontmatter ? { frontmatter } : {}),
-    body: source.slice(bodyOffset),
-    bodyOffset,
+    body: split.body,
+    bodyOffset: split.bodyOffset,
   };
 }
 
@@ -77,6 +96,7 @@ function coerceFrontmatter(raw: unknown): Frontmatter | undefined {
   const name = typeof record['name'] === 'string' ? record['name'] : undefined;
   const description = typeof record['description'] === 'string' ? record['description'] : undefined;
   const tags = coerceTags(record['tags']);
+  const note = typeof record['note'] === 'string' ? record['note'] : undefined;
 
   let args: Record<string, { type?: string; description?: string; default?: string }> | undefined;
   const rawArgs = record['args'];
@@ -107,11 +127,12 @@ function coerceFrontmatter(raw: unknown): Frontmatter | undefined {
     }
   }
 
-  if (!name && !description && !args && !tags) return undefined;
+  if (!name && !description && !args && !tags && !note) return undefined;
   return {
     ...(name ? { name } : {}),
     ...(description ? { description } : {}),
     ...(tags ? { tags } : {}),
+    ...(note ? { note } : {}),
     ...(args ? { args } : {}),
   };
 }
@@ -124,7 +145,7 @@ function coerceFrontmatter(raw: unknown): Frontmatter | undefined {
  * with no upside. Values are lowercased and de-duplicated so `Review` and
  * `review` do not become two entries in the library's filter list.
  */
-function coerceTags(raw: unknown): readonly string[] | undefined {
+export function coerceTags(raw: unknown): readonly string[] | undefined {
   const parts =
     typeof raw === 'string'
       ? raw.split(',')
