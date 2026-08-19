@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["webview/**/*.ts", "src/core/**/*.ts", "src/shared/panelProtocol.ts"]
+  "include": ["webview/**/*.ts", "src/core/**/*.ts", "src/shared/*.ts"]
 }

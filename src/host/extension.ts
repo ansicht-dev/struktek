@@ -14,12 +14,12 @@ import * as vscode from 'vscode';
 import { composeCommand } from './compose';
 import { configureMcpCommand } from './configureMcp';
 import { History } from './history';
-import { Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
-import { LibraryTreeProvider } from './libraryView';
+import { BLOCKS_DIR, Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
 import { StruktekPanel } from './panel';
-import { newTemplateBody, seedLibrary } from './seed';
+import { SidebarViewProvider, SIDEBAR_VIEW_ID } from './sidebarView';
+import { newBlockBody, newTemplateBody, seedLibrary } from './seed';
 import { Stats } from './stats';
 
 interface Session {
@@ -63,14 +63,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Registered once and fed by whichever session is live, so the view survives
   // a workspace change without being torn down and rebuilt.
-  const tree = new LibraryTreeProvider(
+  const sidebar = new SidebarViewProvider(
+    context.extensionUri,
     () => session?.library,
     () => session?.stats,
   );
   context.subscriptions.push(
-    vscode.window.createTreeView('struktek.library', { treeDataProvider: tree }),
+    vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar, {
+      // The frame holds a half-typed query and which sections are open;
+      // rebuilding it on every collapse would throw that away.
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
   );
-  refreshTree = () => tree.refresh();
+  refreshTree = () => sidebar.refresh();
   refreshTree();
 
   const panel = new StruktekPanel(context.extensionUri, () =>
@@ -99,6 +104,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('struktek.newTemplate', () =>
       withSession((s) => newTemplate(s.library)),
     ),
+    vscode.commands.registerCommand('struktek.newBlock', (blockType?: unknown) =>
+      withSession((s) => newBlock(s.library, blockTypeOf(blockType))),
+    ),
+    vscode.commands.registerCommand('struktek.deleteTemplate', (node?: unknown) =>
+      withSession((s) => deleteTemplate(s.library, node)),
+    ),
+    vscode.commands.registerCommand('struktek.deleteBlock', (blockType?: unknown, instance?: unknown) =>
+      withSession((s) => deleteBlock(s.library, blockType, instance)),
+    ),
+    vscode.commands.registerCommand('struktek.deleteBlockType', (node?: unknown) =>
+      withSession((s) => deleteBlockType(s.library, node)),
+    ),
     vscode.commands.registerCommand('struktek.openLibrary', () =>
       withSession((s) => openLibrary(s.library)),
     ),
@@ -108,7 +125,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('struktek.refreshLibrary', () =>
       withSession(async (s) => {
         await s.library.reload();
-        tree.refresh();
+        refreshTree();
         panel.refresh();
       }),
     ),
@@ -116,7 +133,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       withSession(async (s) => {
         const created = await seedLibrary(s.library.root);
         await s.library.reload();
-        tree.refresh();
+        refreshTree();
         panel.refresh();
         if (!created) {
           void vscode.window.showInformationMessage(
@@ -125,9 +142,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       }),
     ),
-    vscode.commands.registerCommand('struktek.openTemplate', (item?: { resourceUri?: vscode.Uri }) =>
+    vscode.commands.registerCommand('struktek.openTemplate', (target?: unknown) =>
       withSession(async (s) => {
-        const uri = item?.resourceUri ?? s.library.list()[0]?.uri;
+        // A name from the sidebar, a tree item from anywhere else, or nothing
+        // from the palette — all three have to land on the same file.
+        const name = templateNameOf(target);
+        const uri =
+          (name ? s.library.get(name)?.uri : undefined) ??
+          (target as { resourceUri?: vscode.Uri } | undefined)?.resourceUri ??
+          s.library.list()[0]?.uri;
         if (!uri) return;
         await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
       }),
@@ -296,6 +319,161 @@ async function newTemplate(library: Library): Promise<void> {
   await library.reload();
   const doc = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(doc);
+}
+
+/**
+ * Delete a library file, once.
+ *
+ * Modal because the tree's inline actions sit a few pixels apart and one of
+ * them composes; the trash lands in the OS bin rather than being unlinked,
+ * because a prompt someone spent an afternoon on is worth a recoverable
+ * mistake. Nothing is refreshed here — the watcher does that.
+ */
+async function confirmDelete(label: string, detail: string, uri: vscode.Uri): Promise<void> {
+  const confirm = 'Delete';
+  const choice = await vscode.window.showWarningMessage(
+    'Delete \"' + label + '\"?',
+    { modal: true, detail },
+    confirm,
+  );
+  if (choice !== confirm) return;
+  await vscode.workspace.fs.delete(uri, { recursive: true, useTrash: true });
+  log('Deleted a library file', { file: uri.toString() });
+}
+
+async function deleteTemplate(library: Library, node: unknown): Promise<void> {
+  const name = templateNameOf(node);
+  const entry = name ? library.get(name) : undefined;
+  if (!entry) return;
+  await confirmDelete(
+    entry.model.name,
+    'The file moves to the trash, so you can put it back. Its history and use count stay.',
+    entry.uri,
+  );
+}
+
+async function deleteBlock(library: Library, node: unknown, instance?: unknown): Promise<void> {
+  const target = blockOf(node, instance);
+  if (!target) return;
+  const uri = await library.blockUri(target.type, target.instance);
+  if (!uri) {
+    void vscode.window.showWarningMessage(
+      'Struktek: could not locate ' + target.type + '/' + target.instance + '.',
+    );
+    return;
+  }
+  await confirmDelete(
+    target.instance,
+    'A template pinned to this value will stop resolving until you pick another. ' +
+      'The file moves to the trash.',
+    uri,
+  );
+}
+
+async function deleteBlockType(library: Library, node: unknown): Promise<void> {
+  const type = blockTypeOf(node);
+  if (!type) return;
+  const instances = library.blocks.names.get(type) ?? [];
+  await confirmDelete(
+    type,
+    // The count is the whole point of the warning: deleting a type takes every
+    // value in it, and every field annotated with it stops resolving.
+    'This removes the folder and ' +
+      (instances.length === 1 ? 'its 1 value' : 'all ' + String(instances.length) + ' of its values') +
+      '. Any field typed \"' + type + '\" will report an unknown type until you recreate it.',
+    vscode.Uri.joinPath(library.root, BLOCKS_DIR, type),
+  );
+}
+
+/**
+ * A tree row hands the command its node; the palette hands it nothing.
+ *
+ * The commands are hidden from the palette, but a keybinding or another
+ * extension can still invoke them, so every accessor tolerates the shapes it
+ * did not expect rather than throwing.
+ */
+function templateNameOf(node: unknown): string | undefined {
+  if (typeof node === 'string') return node;
+  const entry = (node as { entry?: { model?: { name?: unknown } } })?.entry;
+  return typeof entry?.model?.name === 'string' ? entry.model.name : undefined;
+}
+
+function blockTypeOf(node: unknown): string | undefined {
+  if (typeof node === 'string') return node;
+  const type = (node as { type?: unknown })?.type;
+  return typeof type === 'string' ? type : undefined;
+}
+
+/** Two loose arguments from the frame, or one tree node from a menu. */
+function blockOf(node: unknown, second?: unknown): { type: string; instance: string } | undefined {
+  const type = blockTypeOf(node);
+  const instance = typeof second === 'string' ? second : (node as { instance?: unknown })?.instance;
+  return type && typeof instance === 'string' ? { type, instance } : undefined;
+}
+
+/**
+ * Create a block instance, and its type if it does not exist yet.
+ *
+ * A directory under blocks/ IS a type, so making the first value of a new type
+ * is the same act as declaring it — which is why the type step is a QuickPick
+ * with an escape hatch rather than a separate command.
+ */
+async function newBlock(library: Library, preselected?: string): Promise<void> {
+  const NEW_TYPE = String.fromCharCode(43) + ' New type...';
+  let type = preselected;
+
+  if (!type) {
+    const types = [...library.blocks.names.keys()].sort((a, b) => a.localeCompare(b));
+    const picked = await vscode.window.showQuickPick(
+      [
+        ...types.map((name) => ({
+          label: name,
+          description: String((library.blocks.names.get(name) ?? []).length) + ' values',
+        })),
+        { label: NEW_TYPE, description: 'a new folder under blocks/' },
+      ],
+      { title: 'Struktek - New Block', placeHolder: 'Which type?', ignoreFocusOut: true },
+    );
+    if (!picked) return;
+    type = picked.label === NEW_TYPE ? await askName(library, 'Type name', 'output-format') : picked.label;
+    if (!type) return;
+  }
+
+  const instance = await askName(
+    library,
+    'Value name',
+    'markdown-table',
+    library.blocks.names.get(type) ?? [],
+  );
+  if (!instance) return;
+
+  const uri = vscode.Uri.joinPath(library.root, BLOCKS_DIR, type, instance + '.md');
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(newBlockBody(type, instance), 'utf8'));
+  await library.reload();
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+}
+
+/** The same name rules the template command uses — a name is also a filename. */
+async function askName(
+  _library: Library,
+  prompt: string,
+  placeHolder: string,
+  taken: readonly string[] = [],
+): Promise<string | undefined> {
+  const value = await vscode.window.showInputBox({
+    title: 'Struktek - New Block',
+    prompt,
+    placeHolder,
+    ignoreFocusOut: true,
+    validateInput: (raw) => {
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) return 'Give it a name.';
+      if (!/^[A-Za-z0-9_.-]+$/.test(trimmed)) return 'Letters, digits, dot, dash and underscore only.';
+      if (taken.includes(trimmed)) return '\"' + trimmed + '\" already exists.';
+      return undefined;
+    },
+  });
+  return value?.trim();
 }
 
 async function openLibrary(library: Library): Promise<void> {

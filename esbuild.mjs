@@ -1,14 +1,19 @@
 /**
  * Bundler.
  *
- * Three bundles:
+ * Four bundles:
  *
  *   src/extension.ts     -> out/extension.js      the extension host  (cjs/node)
  *   src/mcpBridge/cli.ts -> out/mcp-bridge.js     the stdio bridge    (cjs/node)
  *   webview/panel.ts     -> out/webview/panel.js  the panel UI        (iife/browser)
+ *   webview/sidebar.ts   -> out/webview/sidebar.js the sidebar UI     (iife/browser)
  *
- * The webview bundle is browser-targeted and pulls in  directly, so
+ * The webview bundle is browser-targeted and pulls in `src/core` directly, so
  * the preview runs the real renderer in the frame rather than a copy of it.
+ *
+ * The codicon font is copied in beside them. The sidebar frame draws rows that
+ * a TreeView would otherwise have drawn, and it uses the workbench's own icon
+ * font to do it rather than glyphs that merely resemble one.
  *
  * The bridge keeps its `#!` shebang through the build — that is what makes the
  * bundle directly executable as a `bin`/`npx` target, and
@@ -19,7 +24,7 @@
  */
 
 import * as esbuild from 'esbuild';
-import { existsSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 const prod = process.argv.includes('--prod');
@@ -63,6 +68,19 @@ const panel = withProdFlags({
   minify: false,
 });
 
+// Same shape as the panel bundle, and for the same reason: a second <script
+// nonce> tag in a second frame, with no module loader behind either of them.
+const sidebar = withProdFlags({
+  entryPoints: ['webview/sidebar.ts'],
+  outfile: 'out/webview/sidebar.js',
+  bundle: true,
+  format: 'iife',
+  platform: 'browser',
+  target: 'es2020',
+  sourcemap: true,
+  minify: false,
+});
+
 const bridgeEntry = 'src/mcpBridge/cli.ts';
 const bridge = withProdFlags({
   entryPoints: [bridgeEntry],
@@ -75,9 +93,28 @@ const bridge = withProdFlags({
   minify: false,
 });
 
+/**
+ * Copy the codicon font next to the webview bundles.
+ *
+ * Shipped rather than linked: a webview cannot reach node_modules, and the
+ * stylesheet resolves the .ttf relative to itself, so the two files have to
+ * travel together into out/webview/.
+ */
+function copyCodicons() {
+  const from = 'node_modules/@vscode/codicons/dist/';
+  mkdirSync('out/webview', { recursive: true });
+  for (const file of ['codicon.css', 'codicon.ttf']) {
+    copyFileSync(from + file, 'out/webview/' + file);
+  }
+}
+
 // The bridge lands in a later milestone; building it only when the entry exists
 // keeps `npm run build` working in between.
-const configs = existsSync(bridgeEntry) ? [extension, bridge, panel] : [extension, panel];
+const configs = existsSync(bridgeEntry)
+  ? [extension, bridge, panel, sidebar]
+  : [extension, panel, sidebar];
+
+copyCodicons();
 
 if (watch) {
   const contexts = await Promise.all(configs.map((config) => esbuild.context(config)));

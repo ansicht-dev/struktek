@@ -57,17 +57,12 @@
     "views": {
       "struktek": [
         {
-          "id": "struktek.library",
-          "name": "Templates"
+          "id": "struktek.sidebar",
+          "name": "Struktek",
+          "type": "webview"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "struktek.library",
-        "contents": "No templates yet. Struktek keeps them in `.struktek/templates`.\n[Create Starter Templates](command:struktek.seedLibrary)\n[New Blank Template](command:struktek.newTemplate)\n\nAlready have templates elsewhere? Point `struktek.libraryPath` at them."
-      }
-    ],
     "commands": [
       {
         "command": "struktek.open",
@@ -85,6 +80,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "struktek.newBlock",
+        "title": "Struktek: New Block",
+        "icon": "$(add)"
+      },
+      {
         "command": "struktek.openLibrary",
         "title": "Struktek: Open Template Library"
       },
@@ -96,6 +96,21 @@
       {
         "command": "struktek.openBlock",
         "title": "Struktek: Open Block File"
+      },
+      {
+        "command": "struktek.deleteTemplate",
+        "title": "Struktek: Delete Template",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "struktek.deleteBlock",
+        "title": "Struktek: Delete Block",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "struktek.deleteBlockType",
+        "title": "Struktek: Delete Block Type",
+        "icon": "$(trash)"
       },
       {
         "command": "struktek.refreshLibrary",
@@ -120,35 +135,18 @@
       "view/title": [
         {
           "command": "struktek.open",
-          "when": "view == struktek.library",
+          "when": "view == struktek.sidebar",
           "group": "navigation@0"
         },
         {
-          "command": "struktek.newTemplate",
-          "when": "view == struktek.library",
+          "command": "struktek.refreshLibrary",
+          "when": "view == struktek.sidebar",
           "group": "navigation@1"
         },
         {
-          "command": "struktek.refreshLibrary",
-          "when": "view == struktek.library",
-          "group": "navigation@2"
-        },
-        {
           "command": "struktek.configureMcp",
-          "when": "view == struktek.library",
+          "when": "view == struktek.sidebar",
           "group": "1_struktek@1"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "struktek.compose",
-          "when": "view == struktek.library && viewItem == struktekTemplate",
-          "group": "inline@1"
-        },
-        {
-          "command": "struktek.openTemplate",
-          "when": "view == struktek.library && viewItem == struktekTemplate",
-          "group": "inline@2"
         }
       ],
       "commandPalette": [
@@ -162,6 +160,18 @@
         },
         {
           "command": "struktek.showTemplate",
+          "when": "false"
+        },
+        {
+          "command": "struktek.deleteTemplate",
+          "when": "false"
+        },
+        {
+          "command": "struktek.deleteBlock",
+          "when": "false"
+        },
+        {
+          "command": "struktek.deleteBlockType",
           "when": "false"
         }
       ]
@@ -234,6 +244,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/codicons": "^0.0.46-24",
     "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.24.0",
     "ovsx": "^1.1.1",
