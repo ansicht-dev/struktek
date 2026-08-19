@@ -97,6 +97,23 @@ cannot do.
   as written. Escape a real one as `\[` if you need to.
 - **Last-used values come back.** The second time you use a template, each field
   is pre-filled with whatever you picked last time.
+- **Blocks can carry a header too.** `title`, `description`, `tags` and `note` in
+  frontmatter describe a block in the sidebar. Everything below the fence is
+  what actually lands in the prompt — the header never renders.
+
+## History
+
+Every prompt you compose is kept in `.struktek/.runtime/history.jsonl`, which is
+git-ignored. `Struktek: Open Panel` opens the feed: newest first, searchable by
+what the prompt said, showing which template and which blocks produced it, with
+**Copy** and **Create variant** on each one.
+
+Prompts your agent composes over MCP land there too, tagged `mcp` — with one
+exception. When VS Code is closed the bridge reads templates straight off disk
+and deliberately writes nothing, so there is only ever one writer per file;
+prompts composed in a bare terminal are not recorded.
+
+Keep more or fewer with `struktek.history.limit`, or `0` to keep none.
 
 ## Commands
 
@@ -104,6 +121,8 @@ cannot do.
 |---|---|
 | `Struktek: Compose Prompt` | `Ctrl+Shift+K` — pick a template, fill it, send it |
 | `Struktek: New Template` | create a blank template and open it |
+| `Struktek: New Block` | add a value to a block type, or start a new type |
+| `Struktek: Open Panel` | the history of every prompt you have produced |
 | `Struktek: Open Template Library` | browse and edit what you have |
 | `Struktek: Configure MCP for Agent` | wire your templates into Claude Code or Codex |
 
