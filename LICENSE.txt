@@ -18,6 +18,15 @@ applicable law.
 Prompt templates, blocks, and any other content you author using the Software
 are yours. Nothing in this notice claims any right over them.
 
+EXCEPTION — the MCP bridge. The npm package "@struktek/mcp-bridge", and the
+compiled bundle it distributes, are licensed under the MIT Licence, whose text
+ships inside that package. The bundle embeds portions of this repository
+(notably src/core and src/mcpBridge), and the MIT grant covers those portions
+as distributed in that package. The bridge exists to be fetched and executed on
+other people's machines, which an all-rights-reserved licence would forbid.
+Everything else in this repository, including its source form, remains subject
+to the terms above.
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
