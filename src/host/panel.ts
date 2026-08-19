@@ -10,7 +10,8 @@
  */
 
 import * as vscode from 'vscode';
-import type { History } from './history';
+import { blockRefs, type History, type HistoryEntry } from './history';
+import type { Field } from '../core';
 import type { Library } from './library';
 import { log } from './log';
 import type { Stats } from './stats';
@@ -18,6 +19,8 @@ import { buildPanelHtml } from './panelHtml';
 import type {
   BlockBodies,
   Delivery,
+  HistoryFeedRow,
+  HistoryRow,
   HostMessage,
   LibraryCard,
   TemplateDetail,
@@ -32,9 +35,21 @@ export interface PanelDeps {
   readonly history: History;
 }
 
+/** Which screen the frame is on, so a repaint does not move it. */
+type Screen = 'history' | 'library' | 'template';
+
 export class StruktekPanel {
   private panel: vscode.WebviewPanel | undefined;
   private current: string | undefined;
+  /**
+   * History, not the library, is what opening the panel means now.
+   *
+   * The sidebar is the library browser; a second one in a tab was the same list
+   * twice. What the tab can show that the sidebar cannot is every prompt you
+   * have actually produced.
+   */
+  private screen: Screen = 'history';
+  private seed: { readonly id: string; readonly values: Readonly<Record<string, string>> } | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -44,7 +59,10 @@ export class StruktekPanel {
 
   /** Open, or reveal an existing panel — never two of the same thing. */
   show(template?: string): void {
-    this.current = template ?? this.current;
+    if (template) {
+      this.current = template;
+      this.screen = 'template';
+    }
     if (this.panel) {
       this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Active);
       this.push();
@@ -93,8 +111,36 @@ export class StruktekPanel {
   }
 
   private push(): void {
-    if (this.current) void this.pushTemplate(this.current);
-    else this.pushLibrary();
+    if (this.screen === 'template' && this.current) void this.pushTemplate(this.current);
+    else if (this.screen === 'library') this.pushLibrary();
+    else this.pushHistory();
+  }
+
+  /**
+   * Every prompt ever produced, newest first.
+   *
+   * Joined against the library on the way out so a row can show the template's
+   * tags and say whether it still exists — the entry itself only knows a name,
+   * and a name outlives the file behind it.
+   */
+  private pushHistory(): void {
+    const deps = this.deps();
+    if (!deps) return;
+    const { library, history } = deps;
+
+    const rows = history.all().map((entry): HistoryFeedRow => {
+      const model = library.get(entry.template)?.model;
+      return {
+        ...toRow(entry, model?.fields),
+        template: entry.template,
+        tags: model?.tags ?? [],
+        templateExists: model !== undefined,
+      };
+    });
+
+    const templates = [...new Set(rows.map((row) => row.template))];
+    const tags = [...new Set(rows.flatMap((row) => row.tags))].sort((a, b) => a.localeCompare(b));
+    this.send({ type: 'history', rows, templates, tags });
   }
 
   private pushLibrary(): void {
@@ -132,8 +178,11 @@ export class StruktekPanel {
     const entry = library.get(name);
     if (!entry) {
       // Deleted or renamed under us — fall back rather than showing a blank.
+      // History, not the library: the runs made from it are still there, and
+      // are the only remaining trace of what it said.
       this.current = undefined;
-      this.pushLibrary();
+      this.screen = 'history';
+      this.pushHistory();
       return;
     }
 
@@ -143,6 +192,11 @@ export class StruktekPanel {
       blocks[type] = Object.fromEntries(instances);
     }
     for (const [type, names] of library.blocks.names) blockNames[type] = names;
+
+    // The seed beats sticky values, and is consumed once: a later repaint of
+    // the same template must not silently re-apply an old run.
+    const seed = this.seed;
+    this.seed = undefined;
 
     const sticky: Record<string, string> = {};
     for (const field of entry.model.fields) {
@@ -159,13 +213,8 @@ export class StruktekPanel {
       blocks,
       blockNames,
       sticky,
-      history: history.for(name).map((row) => ({
-        id: row.id,
-        at: row.at,
-        values: row.values,
-        prompt: row.prompt,
-        ...(row.via ? { via: row.via } : {}),
-      })),
+      ...(seed ? { seed: seed.values, seedId: seed.id } : {}),
+      history: history.for(name).map((run) => toRow(run, entry.model.fields)),
       uses: stats.uses(name),
       diagnostics: entry.model.diagnostics.map((d) => ({ message: d.message, severity: d.severity })),
       files: await workspaceFiles(),
@@ -183,14 +232,52 @@ export class StruktekPanel {
         return;
 
       case 'openLibrary':
-        this.current = undefined;
+        this.screen = 'library';
         this.pushLibrary();
+        return;
+
+      case 'openHistory':
+        this.screen = 'history';
+        this.pushHistory();
         return;
 
       case 'openTemplate':
         this.current = message.name;
+        this.screen = 'template';
+        this.seed = undefined;
         await this.pushTemplate(message.name);
         return;
+
+      case 'variant': {
+        // Varying a run means the composer, opened on that template with the
+        // values it actually used — not a blank form you have to reconstruct.
+        const run = deps.history.get(message.id);
+        if (!run) return;
+        if (!deps.library.get(run.template)) {
+          void vscode.window.showWarningMessage(
+            'Struktek: "' + run.template + '" no longer exists, so there is nothing to vary.',
+          );
+          return;
+        }
+        this.current = run.template;
+        this.screen = 'template';
+        this.seed = { id: run.id, values: run.values };
+        await this.pushTemplate(run.template);
+        return;
+      }
+
+      case 'clearAllHistory': {
+        const confirm = 'Clear';
+        const choice = await vscode.window.showWarningMessage(
+          'Clear every generated prompt Struktek has kept? This cannot be undone.',
+          { modal: true, detail: 'Use counts and last-used values are left alone.' },
+          confirm,
+        );
+        if (choice !== confirm) return;
+        await deps.history.clear();
+        this.pushHistory();
+        return;
+      }
 
       case 'newTemplate':
         await vscode.commands.executeCommand('struktek.newTemplate');
@@ -245,7 +332,13 @@ export class StruktekPanel {
     }
 
     deps.stats.record(name, values);
-    deps.history.record(name, values, prompt, via);
+    deps.history.record(
+      name,
+      values,
+      prompt,
+      via,
+      blockRefs(deps.library.get(name)?.model.fields ?? [], values),
+    );
 
     switch (via) {
       case 'chat':
@@ -296,6 +389,25 @@ async function sendToChat(prompt: string): Promise<void> {
       'Struktek: no chat view available — prompt copied instead.',
     );
   }
+}
+
+/**
+ * One history entry as the frame sees it.
+ *
+ * `blocks` is derived when the entry predates the field being recorded: a
+ * block-typed value IS the instance name, so the pairs can be reconstructed
+ * from the template as long as it still declares those fields. Entries whose
+ * template is gone simply show no block chips rather than wrong ones.
+ */
+function toRow(entry: HistoryEntry, fields: readonly Field[] | undefined): HistoryRow {
+  return {
+    id: entry.id,
+    at: entry.at,
+    values: entry.values,
+    prompt: entry.prompt,
+    ...(entry.via ? { via: entry.via } : {}),
+    blocks: entry.blocks ?? (fields ? blockRefs(fields, entry.values) : []),
+  };
 }
 
 async function workspaceFiles(): Promise<string[]> {

@@ -15,7 +15,8 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { History } from '../../host/history';
+import type { Field } from '../../core';
+import { blockRefs, History } from '../../host/history';
 
 let dir: string;
 let runtime: vscode.Uri;
@@ -153,5 +154,80 @@ describe('clearing', () => {
     const reloaded = new History(runtime);
     await reloaded.load();
     expect(reloaded.all()).toEqual([]);
+  });
+});
+
+describe('blocks', () => {
+  const fields: Field[] = [
+    { name: 'target', type: { kind: 'file' }, required: true, span: { start: 0, end: 0 } },
+    { name: 'depth', type: { kind: 'blockType', name: 'depth' }, required: true, span: { start: 0, end: 0 } },
+    {
+      name: 'format',
+      type: { kind: 'blockType', name: 'output-format' },
+      pin: 'prose',
+      required: false,
+      span: { start: 0, end: 0 },
+    },
+  ];
+
+  it('projects block-typed values onto the blocks they selected', () => {
+    expect(blockRefs(fields, { target: 'a.ts', depth: 'thorough', format: 'json-strict' })).toEqual([
+      { type: 'depth', instance: 'thorough' },
+      { type: 'output-format', instance: 'json-strict' },
+    ]);
+  });
+
+  it('falls back to the pin, which is what actually rendered', () => {
+    expect(blockRefs(fields, { depth: 'quick' })).toEqual([
+      { type: 'depth', instance: 'quick' },
+      { type: 'output-format', instance: 'prose' },
+    ]);
+  });
+
+  it('skips a block field left blank with no pin behind it', () => {
+    expect(blockRefs([fields[1]!], {})).toEqual([]);
+    expect(blockRefs([fields[1]!], { depth: '' })).toEqual([]);
+  });
+
+  it('round-trips through the file', async () => {
+    const history = new History(runtime);
+    history.record('code-review', { depth: 'thorough' }, 'go deep', 'chat', [
+      { type: 'depth', instance: 'thorough' },
+    ]);
+    await history.flush();
+
+    const reloaded = new History(runtime);
+    await reloaded.load();
+    expect(reloaded.all()[0]?.blocks).toEqual([{ type: 'depth', instance: 'thorough' }]);
+  });
+
+  it('omits the field entirely rather than writing an empty list', async () => {
+    const history = new History(runtime);
+    history.record('code-review', {}, 'plain', 'chat', []);
+    await history.flush();
+    const line = (await readFile(path.join(dir, 'history.jsonl'), 'utf8')).trim();
+    expect(JSON.parse(line)).not.toHaveProperty('blocks');
+  });
+
+  it('still reads an entry written before blocks were kept', async () => {
+    // Every line already in someone's history.jsonl looks like this one.
+    const legacy = {
+      id: 'abc-1',
+      template: 'code-review',
+      at: '2026-01-01T00:00:00.000Z',
+      values: { depth: 'thorough' },
+      prompt: 'go deep',
+    };
+    await writeFile(path.join(dir, 'history.jsonl'), JSON.stringify(legacy) + '\n');
+
+    const history = new History(runtime);
+    await history.load();
+    const entry = history.all()[0];
+    expect(entry?.blocks).toBeUndefined();
+    // The panel reconstructs them from the template it still has.
+    expect(blockRefs(fields, entry?.values ?? {})).toEqual([
+      { type: 'depth', instance: 'thorough' },
+      { type: 'output-format', instance: 'prose' },
+    ]);
   });
 });

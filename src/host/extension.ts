@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import { composeCommand } from './compose';
 import { configureMcpCommand } from './configureMcp';
-import { History } from './history';
+import { blockRefs, History } from './history';
 import { BLOCKS_DIR, Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
@@ -251,7 +251,13 @@ async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promi
     view: () => ({
       templates: () => current.library.list().map((entry) => entry.model),
       blocks: () => current.library.blocks,
-      record: (template, values) => current.stats.record(template, values),
+      // An agent composing a prompt is still a prompt produced, so it lands in
+      // the feed like any other — tagged with where it came from.
+      record: (template, values, prompt) => {
+        current.stats.record(template, values);
+        const fields = current.library.get(template)?.model.fields ?? [];
+        current.history.record(template, values, prompt, 'mcp', blockRefs(fields, values));
+      },
     }),
   });
 

@@ -110,8 +110,15 @@ describe('composePayload', () => {
 
   it('records the composition when the view can record', () => {
     const record = vi.fn();
-    composePayload(view(record), 'code-review', { target: 'a.ts', focus: 'security' });
-    expect(record).toHaveBeenCalledWith('code-review', { target: 'a.ts', focus: 'security' });
+    const result = composePayload(view(record), 'code-review', { target: 'a.ts', focus: 'security' });
+    // The rendered prompt goes with it: an agent-composed prompt has to be
+    // filed in the history the same as one composed by hand, and the payload
+    // is the only place the text exists.
+    expect(record).toHaveBeenCalledWith(
+      'code-review',
+      { target: 'a.ts', focus: 'security' },
+      result.prompt,
+    );
   });
 
   it('does not record a template that was not found', () => {

@@ -24,8 +24,19 @@ export const MCP_SERVER_NAME = 'struktek';
 export interface LibraryView {
   templates(): readonly TemplateModel[];
   blocks(): BlockLibrary;
-  /** Called after a successful compose. Absent offline — nothing to record into. */
-  record?(template: string, values: Readonly<Record<string, string | undefined>>): void;
+  /**
+   * Called after a successful compose. Absent offline — nothing to record into.
+   *
+   * The rendered prompt is passed too, so a host that keeps history can file an
+   * agent-composed prompt beside the ones composed by hand. Without it the feed
+   * would silently omit the runs an agent made, which are the ones you are
+   * least likely to remember making.
+   */
+  record?(
+    template: string,
+    values: Readonly<Record<string, string | undefined>>,
+    prompt: string,
+  ): void;
 }
 
 export interface TextContent {
@@ -146,7 +157,7 @@ export function composePayload(
     fields: model.fields,
     blocks: view.blocks().bodies,
   });
-  view.record?.(model.name, values);
+  view.record?.(model.name, values, result.text);
   return { prompt: result.text, unfilled: result.unfilled };
 }
 

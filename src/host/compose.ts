@@ -17,7 +17,7 @@ import type { Library, TemplateEntry } from './library';
 import { log } from './log';
 import { seedLibrary } from './seed';
 import type { Stats } from './stats';
-import type { History } from './history';
+import { blockRefs, type History } from './history';
 
 /** Distinguishes "the user pressed Escape" from "this optional field is blank". */
 const CANCELLED = Symbol('cancelled');
@@ -47,8 +47,9 @@ export async function composeCommand(
   });
 
   stats.record(entry.model.name, values);
+  const blocks = blockRefs(entry.model.fields, values);
   await deliver(result.text, entry.model, result.unfilled, (via) => {
-    history.record(entry.model.name, values, result.text, via);
+    history.record(entry.model.name, values, result.text, via, blocks);
   });
 }
 

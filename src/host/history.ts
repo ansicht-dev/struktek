@@ -17,6 +17,7 @@
  */
 
 import * as vscode from 'vscode';
+import type { Field } from '../core';
 import { log } from './log';
 
 export interface HistoryEntry {
@@ -29,6 +30,42 @@ export interface HistoryEntry {
   readonly prompt: string;
   /** Where it went, when we know — 'chat', 'clipboard', 'editor', 'mcp'. */
   readonly via?: string;
+  /**
+   * The block values this prompt was built from, resolved at compose time.
+   *
+   * Optional because every entry written before the feed existed lacks it. The
+   * pairs are derivable from `values` against the template, but only while that
+   * template still exists and still declares the same fields — recording them
+   * means a run stays readable after the template it came from is edited away.
+   */
+  readonly blocks?: readonly BlockRef[];
+}
+
+/** One block instance a prompt drew on: the folder, and the file inside it. */
+export interface BlockRef {
+  readonly type: string;
+  readonly instance: string;
+}
+
+/**
+ * Which blocks a set of values actually selected.
+ *
+ * A block-typed field's value IS the instance name, so this is a projection
+ * rather than a lookup — which is also why it can reconstruct the list for an
+ * entry recorded before `blocks` was kept, as long as the template still
+ * declares the same fields.
+ */
+export function blockRefs(
+  fields: readonly Field[],
+  values: Readonly<Record<string, string | undefined>>,
+): BlockRef[] {
+  const refs: BlockRef[] = [];
+  for (const field of fields) {
+    if (field.type.kind !== 'blockType') continue;
+    const instance = values[field.name] ?? field.pin;
+    if (instance && instance.length > 0) refs.push({ type: field.type.name, instance });
+  }
+  return refs;
 }
 
 const FILENAME = 'history.jsonl';
@@ -100,6 +137,7 @@ export class History {
     values: Readonly<Record<string, string | undefined>>,
     prompt: string,
     via?: string,
+    blocks?: readonly BlockRef[],
   ): HistoryEntry {
     const clean: Record<string, string> = {};
     for (const [field, value] of Object.entries(values)) {
@@ -116,6 +154,7 @@ export class History {
       values: clean,
       prompt,
       ...(via ? { via } : {}),
+      ...(blocks && blocks.length > 0 ? { blocks } : {}),
     };
 
     this.entries.push(entry);

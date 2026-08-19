@@ -28,12 +28,34 @@ export interface LibraryCard {
   readonly errorCount: number;
 }
 
+/** One block a prompt drew on, as the feed shows it. */
+export interface BlockRef {
+  readonly type: string;
+  readonly instance: string;
+}
+
 export interface HistoryRow {
   readonly id: string;
   readonly at: string;
   readonly values: Readonly<Record<string, string>>;
   readonly prompt: string;
   readonly via?: string;
+  readonly blocks: readonly BlockRef[];
+}
+
+/**
+ * A row in the panel-wide feed.
+ *
+ * `HistoryRow` is scoped to one template and needs no name; the feed spans all
+ * of them, so it carries the template it came from, that template's tags for
+ * filtering, and whether the template is still there — a run outlives the
+ * template it was made from, and "create a variant" has nowhere to go once it
+ * does not.
+ */
+export interface HistoryFeedRow extends HistoryRow {
+  readonly template: string;
+  readonly tags: readonly string[];
+  readonly templateExists: boolean;
 }
 
 /** Everything the compose screen needs, in one message. */
@@ -48,6 +70,15 @@ export interface TemplateDetail {
   readonly blockNames: Record<string, readonly string[]>;
   /** Last-used value per field. */
   readonly sticky: Readonly<Record<string, string>>;
+  /**
+   * Values to start from, beating `sticky`. Set when a run is being varied.
+   *
+   * `seedId` is what makes it land: the frame keeps values across refreshes of
+   * the same template, so a new seed has to be distinguishable from the same
+   * template arriving again.
+   */
+  readonly seed?: Readonly<Record<string, string>>;
+  readonly seedId?: string;
   readonly history: readonly HistoryRow[];
   readonly uses: number;
   readonly diagnostics: readonly { message: string; severity: string }[];
@@ -57,6 +88,12 @@ export interface TemplateDetail {
 
 export type HostMessage =
   | { readonly type: 'library'; readonly cards: readonly LibraryCard[]; readonly tags: readonly string[] }
+  | {
+      readonly type: 'history';
+      readonly rows: readonly HistoryFeedRow[];
+      readonly templates: readonly string[];
+      readonly tags: readonly string[];
+    }
   | { readonly type: 'template'; readonly detail: TemplateDetail }
   | { readonly type: 'notice'; readonly text: string; readonly kind: 'info' | 'warn' };
 
@@ -65,6 +102,9 @@ export type Delivery = 'chat' | 'clipboard' | 'editor' | 'insert';
 export type WebviewMessage =
   | { readonly type: 'ready' }
   | { readonly type: 'openLibrary' }
+  | { readonly type: 'openHistory' }
+  | { readonly type: 'variant'; readonly id: string }
+  | { readonly type: 'clearAllHistory' }
   | { readonly type: 'openTemplate'; readonly name: string }
   | { readonly type: 'newTemplate' }
   | { readonly type: 'editTemplate'; readonly name: string }

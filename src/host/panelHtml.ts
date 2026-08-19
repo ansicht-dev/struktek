@@ -26,6 +26,25 @@ export function buildPanelHtml(webview: vscode.Webview, extensionUri: vscode.Uri
 const STYLES = `
 #root { max-width: 1180px; margin: 0 auto; padding: 20px 24px 48px; }
 
+/* ── navigation ─────────────────────────────────────────── */
+.stk-nav {
+  display: flex; gap: 2px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+}
+.stk-nav-item {
+  background: transparent; color: var(--vscode-descriptionForeground);
+  border: none; border-bottom: 1px solid transparent;
+  border-radius: 0; padding: 7px 14px;
+}
+.stk-nav-item:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground);
+}
+/* The active tab is marked by weight and a rule, not by colour alone. */
+.stk-nav-item.stk-nav-on {
+  color: var(--vscode-foreground); font-weight: 600;
+  border-bottom-color: var(--vscode-focusBorder);
+}
+
 /* ── chrome ─────────────────────────────────────────────── */
 .stk-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .stk-title { font-size: 1.45em; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
@@ -98,7 +117,33 @@ const STYLES = `
 .stk-empty-slot { color: var(--vscode-descriptionForeground); font-style: italic; }
 .stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)); }
 
-/* ── history ────────────────────────────────────────────── */
+/* ── history feed ───────────────────────────────────────── */
+.stk-feed { display: flex; flex-direction: column; gap: 10px; }
+.stk-run-card {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 12px 14px; border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+}
+.stk-run-top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.stk-run-name { font-weight: 600; }
+.stk-excerpt {
+  text-align: left; width: 100%; margin: 0;
+  padding: 10px 12px; border-radius: 4px; cursor: pointer;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-editor-font-family); font-size: .88em; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.stk-excerpt:hover { border-color: var(--vscode-focusBorder); }
+/* Collapsed rows stay one line so the feed scans; expanded ones get a cap
+   rather than an unbounded card that pushes everything else off screen. */
+.stk-excerpt-open { max-height: 340px; overflow: auto; }
+.stk-ref { display: flex; gap: 5px; flex-wrap: wrap; }
+.stk-run-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── per-template history ───────────────────────────────── */
 .stk-section { margin-top: 30px; }
 .stk-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .stk-h2 { font-size: 1.05em; font-weight: 600; margin: 0; }
