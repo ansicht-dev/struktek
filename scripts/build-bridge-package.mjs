@@ -43,10 +43,12 @@ const manifest = {
     'agent — through the running extension when it is up, straight from disk when it is not.',
   license: 'UNLICENSED',
   type: 'commonjs',
-  bin: { 'struktek-mcp-bridge': './mcp-bridge.js' },
+  // No `./` prefix and a `git+` scheme: npm rewrites both on publish and warns
+  // about it, which means the tarball never quite matches what we generated.
+  bin: { 'struktek-mcp-bridge': 'mcp-bridge.js' },
   files: ['mcp-bridge.js', 'README.md'],
   engines: { node: '>=18' },
-  repository: root.repository,
+  repository: { ...root.repository, url: 'git+' + String(root.repository.url).replace(/^git\+/, '') },
   homepage: root.homepage,
   keywords: ['mcp', 'model-context-protocol', 'struktek', 'prompt', 'prompt-engineering', 'claude-code', 'codex'],
   publishConfig: { access: 'public' },
