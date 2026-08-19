@@ -1,10 +1,23 @@
 /**
  * The panel's HTML shell and its stylesheet.
  *
- * All styling lives here rather than in the webview modules, which only ever
- * set `className`. No literal colour is written where a theme token exists, so
- * the panel follows the user's theme — including high contrast — without a
- * second palette to maintain.
+ * All styling lives here; the webview modules only ever set `className`.
+ *
+ * THE RULE: no literal colour anywhere, and nothing is assumed to be themed
+ * just because it is a native control. A webview is a browser frame, so an
+ * unstyled `<option>`, placeholder, selection highlight, scrollbar or search
+ * clear-button renders with BROWSER defaults — which means white-on-white the
+ * moment someone uses a dark theme. Every such element is claimed explicitly
+ * below, even where the default happens to look fine in the theme being
+ * developed against.
+ *
+ * High contrast is handled the same way rather than as an afterthought:
+ * borders that are `transparent` in normal themes resolve to
+ * `--vscode-contrastBorder`, which only HC themes define, so outlines appear
+ * exactly where those themes expect them.
+ *
+ * `src/__tests__/host/panelHtml.test.ts` enforces this — a hex colour added
+ * here fails the suite.
  *
  * Script runs under a nonce and `default-src 'none'`: this frame renders text
  * the user wrote, and there is no reason for it to reach the network.
@@ -48,6 +61,40 @@ body {
 }
 #root { max-width: 1180px; margin: 0 auto; padding: 20px 24px 48px; }
 
+/* ── claiming the browser's defaults ─────────────────────── */
+/* None of these are styled by VS Code for us. Left alone they fall back to
+   user-agent colours, which are built for a white page. */
+
+::selection {
+  background: var(--vscode-editor-selectionBackground);
+  color: var(--vscode-editor-selectionForeground, inherit);
+}
+::placeholder { color: var(--vscode-input-placeholderForeground); opacity: 1; }
+
+/* Scrollbars inside our own overflow containers — the frame's own scrollbar is
+   themed by VS Code, but nested ones are not. */
+* { scrollbar-color: var(--vscode-scrollbarSlider-background) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground); }
+::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* The clear button in a search field is a dark glyph bitmap by default, i.e.
+   invisible on a dark theme. Recoloured via mask so it follows the theme. */
+::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none;
+  height: 12px; width: 12px; cursor: pointer;
+  background-color: var(--vscode-icon-foreground, currentColor);
+  -webkit-mask: var(--stk-clear-icon) center / contain no-repeat;
+  mask: var(--stk-clear-icon) center / contain no-repeat;
+}
+:root {
+  /* Inline SVG so no network request is needed under the CSP. */
+  --stk-clear-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8M12 4l-8 8' stroke='%23000' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
+}
+
 /* ── chrome ─────────────────────────────────────────────── */
 .stk-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .stk-title { font-size: 1.45em; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
@@ -56,25 +103,48 @@ body {
 
 button {
   font-family: inherit; font-size: inherit;
-  border: 1px solid transparent; border-radius: 4px;
+  /* transparent normally, a real outline under high contrast. */
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 4px;
   padding: 5px 12px; cursor: pointer;
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
 }
 button:hover { background: var(--vscode-button-hoverBackground); }
-button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
-button.stk-ghost {
-  background: transparent; color: var(--vscode-foreground);
-  border-color: var(--vscode-editorWidget-border, var(--vscode-widget-border, transparent));
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px;
 }
-button.stk-ghost:hover { background: var(--vscode-toolbar-hoverBackground); }
+/* Secondary buttons have their own token pair — deriving them from the
+   foreground colour only coincidentally matches most themes. */
+button.stk-ghost {
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  border-color: var(--vscode-contrastBorder, var(--vscode-editorWidget-border, transparent));
+}
+button.stk-ghost:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+}
 button:disabled { opacity: .5; cursor: default; }
 
-input, select, textarea {
+input, textarea {
   font-family: inherit; font-size: inherit; width: 100%;
   padding: 5px 8px; border-radius: 4px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent);
+  border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder, transparent));
+}
+/* A select is NOT an input: VS Code themes them from separate tokens, and the
+   popup list is drawn by the browser from the element's own colours. */
+select {
+  font-family: inherit; font-size: inherit; width: 100%;
+  padding: 5px 8px; border-radius: 4px;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-contrastBorder, transparent));
+}
+/* The one that bites: unstyled options render white-on-white in dark themes. */
+option {
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background, var(--vscode-input-background)));
 }
 input:focus, select:focus, textarea:focus {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px;
@@ -89,7 +159,7 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
   display: inline-block; padding: 1px 8px; border-radius: 10px;
   font-size: .82em; line-height: 1.7;
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
-  border: 1px solid transparent; cursor: pointer;
+  border: 1px solid var(--vscode-contrastBorder, transparent); cursor: pointer;
 }
 .stk-chip[aria-pressed="true"] { border-color: var(--vscode-focusBorder); }
 .stk-chip.stk-static { cursor: default; }
@@ -99,7 +169,7 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
   text-align: left; width: 100%;
   padding: 13px 15px; border-radius: 6px; cursor: pointer;
   background: var(--vscode-editorWidget-background);
-  border: 1px solid var(--vscode-editorWidget-border, transparent);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
   color: var(--vscode-foreground);
   display: flex; flex-direction: column; gap: 7px;
 }
@@ -137,14 +207,14 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
 .stk-pane {
   position: sticky; top: 20px;
   border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--vscode-editorWidget-border, transparent);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
   background: var(--vscode-textCodeBlock-background, var(--vscode-editorWidget-background));
 }
 .stk-pane-head {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 12px; font-size: .85em;
   color: var(--vscode-descriptionForeground);
-  border-bottom: 1px solid var(--vscode-editorWidget-border, transparent);
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
 }
 .stk-preview {
   margin: 0; padding: 14px;
@@ -153,10 +223,8 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
   line-height: 1.55; white-space: pre-wrap; word-break: break-word;
   max-height: 52vh; overflow: auto;
 }
-/* A value the user supplied, so they can see their input land in the prose. */
-.stk-slot { border-radius: 2px; background: color-mix(in srgb, var(--vscode-focusBorder) 22%, transparent); }
 .stk-empty-slot { color: var(--vscode-descriptionForeground); font-style: italic; }
-.stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--vscode-editorWidget-border, transparent); }
+.stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)); }
 
 /* ── history ────────────────────────────────────────────── */
 .stk-section { margin-top: 30px; }
@@ -165,7 +233,7 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
 
 .stk-run {
   border-radius: 5px; margin-bottom: 7px;
-  border: 1px solid var(--vscode-editorWidget-border, transparent);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
   background: var(--vscode-editorWidget-background);
 }
 .stk-run-head {
