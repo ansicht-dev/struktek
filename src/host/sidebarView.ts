@@ -218,9 +218,9 @@ body { overflow: hidden; }
 .codicon { flex: 0 0 auto; }
 
 /* ── search row ─────────────────────────────────────────── */
-.stk-search { display: flex; gap: 4px; padding: 6px 10px; flex: 0 0 auto; }
+.stk-search { display: flex; gap: 4px; padding: 6px 8px; flex: 0 0 auto; }
 /* VS Code inputs are 2px-radius and tighter than the panel's form fields. */
-.stk-search input { flex: 1 1 auto; min-width: 0; padding: 3px 5px; border-radius: 2px; }
+.stk-search input { flex: 1 1 auto; width: auto; min-width: 0; padding: 3px 5px; border-radius: 2px; }
 .stk-funnel {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
   width: 24px; padding: 0; border-radius: 2px;
@@ -233,13 +233,13 @@ body { overflow: hidden; }
   color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
   border-color: var(--vscode-inputOption-activeBorder, var(--vscode-contrastBorder, transparent));
 }
-.stk-tagrow { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 6px; flex: 0 0 auto; }
+.stk-tagrow { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 6px; flex: 0 0 auto; }
 
 /* ── pane headers ───────────────────────────────────────── */
 .stk-body { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
 .stk-section-title {
   display: flex; align-items: center; width: 100%;
-  height: 22px; line-height: 22px; padding: 0 8px 0 4px;
+  height: 22px; line-height: 22px; padding: 0;
   border: none; border-radius: 0; cursor: pointer; text-align: left;
   background: var(--vscode-sideBarSectionHeader-background, transparent);
   color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
@@ -253,16 +253,16 @@ body { overflow: hidden; }
 .stk-section-count {
   padding: 3px 5px; border-radius: 11px;
   font-size: 11px; line-height: 11px; font-weight: normal;
-  min-width: 18px; min-height: 18px; text-align: center;
+  min-width: 18px; min-height: 18px; text-align: center; margin-right: 8px;
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
 }
-.stk-section-actions { display: flex; margin-right: 2px; }
+.stk-section-actions { display: flex; margin-right: 4px; }
 .stk-section-title:not(:hover) .stk-section-actions { visibility: hidden; }
 
 /* ── tree rows ──────────────────────────────────────────── */
 .stk-row {
   display: flex; align-items: center;
-  height: 22px; line-height: 22px; padding: 0 12px 0 4px;
+  height: 22px; line-height: 22px; padding: 0;
   cursor: pointer; color: inherit;
 }
 .stk-row:hover { background: var(--vscode-list-hoverBackground); color: var(--vscode-list-hoverForeground, inherit); }
@@ -273,16 +273,16 @@ body { overflow: hidden; }
   background: var(--vscode-list-inactiveSelectionBackground);
   color: var(--vscode-list-inactiveSelectionForeground, inherit);
 }
-/* One twistie width, matching a tree's indent guide spacing. */
+/* Every row reserves the twistie column, leaf or not, so labels line up. */
 .stk-twistie { width: 16px; font-size: 16px; flex: 0 0 auto; }
-.stk-indent { padding-left: 20px; }
+.stk-indent { padding-left: 8px; }
 .stk-icon { margin-right: 6px; font-size: 16px; }
 .stk-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stk-row-note {
   margin-left: 6px; opacity: .7; font-size: .9em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.stk-row-actions { margin-left: auto; display: flex; flex: 0 0 auto; }
+.stk-row-actions { margin-left: auto; margin-right: 4px; display: flex; flex: 0 0 auto; }
 .stk-row:not(:hover) .stk-row-actions { display: none; }
 .stk-act {
   display: flex; align-items: center; justify-content: center;

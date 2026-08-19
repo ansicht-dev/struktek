@@ -77,7 +77,12 @@ ${shell.body}
 export const BASE_STYLES = `
 *, *::before, *::after { box-sizing: border-box; }
 body {
+  /* VS Code injects its own stylesheet into every webview, and it sets
+     padding: 0 20px on the body. Resetting the margin is not enough — that
+     padding insets everything from both edges, which a sidebar frame drawing
+     full-width rows cannot live with. Each frame decides its own spacing. */
   margin: 0;
+  padding: 0;
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-foreground);
