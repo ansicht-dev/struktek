@@ -78,9 +78,6 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
       case 'ready':
         this.refresh();
         return;
-      case 'compose':
-        await vscode.commands.executeCommand('struktek.compose', message.name);
-        return;
       case 'showTemplate':
         await vscode.commands.executeCommand('struktek.showTemplate', message.name);
         return;

@@ -58,7 +58,6 @@ export type SidebarHostMessage = {
 
 export type SidebarMessage =
   | { readonly type: 'ready' }
-  | { readonly type: 'compose'; readonly name: string }
   | { readonly type: 'showTemplate'; readonly name: string }
   | { readonly type: 'openTemplate'; readonly name: string }
   | { readonly type: 'deleteTemplate'; readonly name: string }

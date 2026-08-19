@@ -315,7 +315,9 @@ function templateRowNode(row: TemplateRow): HTMLElement {
 
   node.append(
     el('span', { class: 'stk-row-actions' }, [
-      action('play', 'Compose', () => post({ type: 'compose', name: row.name })),
+      // The panel's compose screen, not the QuickPick chain — a button that
+      // says Compose has to open the thing you compose in.
+      action('play', 'Compose', () => post({ type: 'showTemplate', name: row.name })),
       action('go-to-file', 'Open file', () => post({ type: 'openTemplate', name: row.name })),
       action('trash', 'Delete', () => post({ type: 'deleteTemplate', name: row.name })),
     ]),
