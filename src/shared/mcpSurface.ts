@@ -16,7 +16,7 @@
 
 import { McpServer, type RegisteredPrompt } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { render, type BlockLibrary, type Field, type TemplateModel } from '../core';
+import { render, validateValues, type BlockLibrary, type Field, type TemplateModel } from '../core';
 
 export const MCP_SERVER_NAME = 'struktek';
 
@@ -152,6 +152,14 @@ export function composePayload(
         (view.templates().map((t) => t.name).join(', ') || '(none)'),
     };
   }
+  // A value that is not one of a closed set is a mistake, not a rendering
+  // instruction. Refusing it costs the caller one retry; accepting it hands
+  // back a prompt that looks finished and asks for the wrong thing.
+  const problems = validateValues(model.fields, values, { blockTypes: view.blocks().names });
+  if (problems.length > 0) {
+    return { error: problems.map((problem) => problem.message).join(' ') };
+  }
+
   const result = render(model.nodes, {
     values,
     fields: model.fields,

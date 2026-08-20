@@ -12,6 +12,11 @@ export { parse, type ParseResult } from './parse';
 export { analyze, type AnalyzeOptions } from './analyze';
 export { render, type RenderOptions, type RenderResult } from './render';
 export {
+  validateValues,
+  type ValidateValuesOptions,
+  type ValueProblem,
+} from './values';
+export {
   loadBlocks,
   mapBlockReader,
   readBlockFile,

@@ -214,3 +214,39 @@ describe('callToolDirect', () => {
     }
   });
 });
+
+describe('composePayload value checking', () => {
+  it('refuses a choice that is not one of the options', () => {
+    // Previously this rendered verbatim: `focus=bananas` came back as a
+    // finished-looking prompt asking for bananas.
+    const result = composePayload(view(), 'code-review', { target: 'a.ts', focus: 'bananas' });
+    expect(result.prompt).toBeUndefined();
+    expect(result.error).toContain('bananas');
+    expect(result.error).toContain('correctness');
+  });
+
+  it('refuses a block value that is not an instance of its type', () => {
+    // Previously this rendered as nothing, leaving the sentence around it
+    // dangling, and said so only through an entry in `unfilled`.
+    const result = composePayload(view(), 'code-review', {
+      target: 'a.ts',
+      focus: 'security',
+      format: 'yaml',
+    });
+    expect(result.prompt).toBeUndefined();
+    expect(result.error).toContain('yaml');
+    expect(result.error).toContain('json-strict, prose');
+  });
+
+  it('does not record a composition it refused', () => {
+    const record = vi.fn();
+    composePayload(view(record), 'code-review', { target: 'a.ts', focus: 'bananas' });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('still composes when every value is legal', () => {
+    const result = composePayload(view(), 'code-review', { target: 'a.ts', focus: 'security' });
+    expect(result.error).toBeUndefined();
+    expect(result.prompt).toContain('security');
+  });
+});
