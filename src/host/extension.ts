@@ -17,6 +17,7 @@ import { blockRefs, History } from './history';
 import { BLOCKS_DIR, Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
+import { McpStatus, MCP_STATUS_COMMAND } from './mcpStatus';
 import { StruktekPanel } from './panel';
 import { SidebarViewProvider, SIDEBAR_VIEW_ID } from './sidebarView';
 import { newBlockBody, newTemplateBody, seedLibrary } from './seed';
@@ -44,6 +45,15 @@ let refreshTree: () => void = () => undefined;
 /** Set once the panel exists, so a library change repaints whatever it shows. */
 let refreshPanel: () => void = () => undefined;
 
+/**
+ * The MCP indicator, created once and told what each session's server is doing.
+ *
+ * Lives outside the session for the same reason the views do: a workspace
+ * change replaces the server, and the item has to survive that to report on
+ * the next one.
+ */
+let mcpStatus: McpStatus | undefined;
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   context.subscriptions.push(initLog());
   applyLogLevel();
@@ -54,6 +64,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // The library path is not hot-swappable; the setting says so.
     }),
   );
+
+  // Before the session opens, because opening one starts the MCP server and
+  // reports what happened to this item. Created after, it would miss the only
+  // report it ever gets.
+  mcpStatus = new McpStatus({
+    configure: () => vscode.commands.executeCommand('struktek.configureMcp'),
+    restart: () => vscode.commands.executeCommand('struktek.restartMcp'),
+  });
+  context.subscriptions.push(mcpStatus);
 
   await openSession();
   context.subscriptions.push(
@@ -126,6 +145,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
     vscode.commands.registerCommand('struktek.configureMcp', () =>
       withSession((s) => configureMcpCommand(s.workspaceRoot)),
+    ),
+    vscode.commands.registerCommand(MCP_STATUS_COMMAND, () => mcpStatus?.pick()),
+    vscode.commands.registerCommand('struktek.restartMcp', () =>
+      withSession(async (s) => {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) return;
+        await s.mcp?.close().catch(() => undefined);
+        s.mcp = undefined;
+        await startMcp(s, folder);
+      }),
     ),
     vscode.commands.registerCommand('struktek.refreshLibrary', () =>
       withSession(async (s) => {
@@ -240,11 +269,17 @@ async function openSession(): Promise<void> {
  */
 async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promise<void> {
   const enabled = vscode.workspace.getConfiguration('struktek').get<boolean>('mcp.enabled', true);
-  if (!enabled) return;
+  // Switched off, or a workspace that cannot host it: not running, and not a
+  // problem either. The indicator says nothing rather than nagging.
+  if (!enabled) {
+    mcpStatus?.set({ kind: 'off' });
+    return;
+  }
   if (folder.uri.scheme !== 'file') {
     log('MCP server not started — the workspace is not on a local filesystem', {
       scheme: folder.uri.scheme,
     });
+    mcpStatus?.set({ kind: 'off' });
     return;
   }
 
@@ -264,13 +299,17 @@ async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promi
         current.history.record(template, values, prompt, 'mcp', blockRefs(fields, values));
       },
     }),
+    onSessionsChanged: () => mcpStatus?.update(host.agents),
   });
 
   try {
-    await host.listen();
+    const url = await host.listen();
     current.mcp = host;
+    mcpStatus?.set({ kind: 'running', url, agents: host.agents });
   } catch (err) {
     log.error('MCP server failed to start', { error: String(err) });
+    // The only state you could not previously discover without opening the log.
+    mcpStatus?.set({ kind: 'failed', reason: String(err) });
   }
 }
 
@@ -283,6 +322,7 @@ function extensionVersion(): string {
 function closeSession(): void {
   const current = session;
   session = undefined;
+  mcpStatus?.set({ kind: 'off' });
   current?.library.dispose();
   void current?.mcp?.close().catch(() => undefined);
 }

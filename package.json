@@ -127,6 +127,15 @@
         "icon": "$(plug)"
       },
       {
+        "command": "struktek.restartMcp",
+        "title": "Struktek: Restart MCP Server",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "struktek.mcpStatus",
+        "title": "Struktek: MCP Server Status"
+      },
+      {
         "command": "struktek.showTemplate",
         "title": "Struktek: Open Template in Panel"
       }
@@ -172,6 +181,10 @@
         },
         {
           "command": "struktek.deleteBlockType",
+          "when": "false"
+        },
+        {
+          "command": "struktek.mcpStatus",
           "when": "false"
         }
       ]

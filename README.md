@@ -165,6 +165,12 @@ your agent two ways at once:
   model: you can invoke one, but the agent cannot see it to choose. This is what
   lets an agent compose a good prompt for its own subagents.
 
+A plug in the status bar says whether the server is up and how many agents are
+attached; it turns amber if the server could not start, which is the one
+failure you would otherwise only find in the output channel. Click it to
+configure an agent, copy the URL, read the log, or restart. Nothing appears
+when MCP is switched off or the workspace cannot host it.
+
 The generated config launches `npx -y @struktek/mcp-bridge` — no port, no token,
 no absolute path — so it is static, committable, and survives restarts.
 

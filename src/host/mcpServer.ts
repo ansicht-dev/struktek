@@ -40,6 +40,14 @@ export interface McpContext {
   readonly version: string;
   /** Read per request, never snapshotted — the library is watched and mutates. */
   readonly view: () => LibraryView;
+  /**
+   * Called when an agent connects or disconnects.
+   *
+   * A callback rather than an event emitter because this module deliberately
+   * imports no `vscode` — it is the one host module that is pure node, and the
+   * status bar can adapt rather than the server reaching for the workbench.
+   */
+  readonly onSessionsChanged?: () => void;
 }
 
 interface Session {
@@ -58,6 +66,11 @@ export class McpServerHost {
 
   get url(): string | undefined {
     return this.listeningUrl;
+  }
+
+  /** How many agents are attached right now. */
+  get agents(): number {
+    return this.sessions.size;
   }
 
   /** Tell every live session the prompt list changed. */
@@ -190,10 +203,14 @@ export class McpServerHost {
           return;
         }
         this.sessions.set(id, { transport, struktek });
+        this.context.onSessionsChanged?.();
       },
     });
     transport.onclose = () => {
-      if (transport.sessionId) this.sessions.delete(transport.sessionId);
+      if (transport.sessionId) {
+        this.sessions.delete(transport.sessionId);
+        this.context.onSessionsChanged?.();
+      }
     };
     await struktek.server.connect(transport);
     return transport;
