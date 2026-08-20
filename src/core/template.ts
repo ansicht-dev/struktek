@@ -76,11 +76,14 @@ export interface LoadTemplateOptions extends Omit<AnalyzeOptions, 'frontmatter'>
 export function loadTemplate(source: string, opts: LoadTemplateOptions): TemplateModel {
   const split = splitFrontmatter(source, opts.parseYaml);
   const parsed = parse(split.body, split.bodyOffset);
-  return analyze(parsed, {
-    name: opts.name,
-    ...(split.frontmatter ? { frontmatter: split.frontmatter } : {}),
-    ...(opts.blockTypes ? { blockTypes: opts.blockTypes } : {}),
-  });
+  return {
+    source,
+    ...analyze(parsed, {
+      name: opts.name,
+      ...(split.frontmatter ? { frontmatter: split.frontmatter } : {}),
+      ...(opts.blockTypes ? { blockTypes: opts.blockTypes } : {}),
+    }),
+  };
 }
 
 /**

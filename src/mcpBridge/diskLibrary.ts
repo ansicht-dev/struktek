@@ -63,20 +63,21 @@ export class DiskLibrary {
     const root = path.join(this.options.root, 'blocks');
     const bodies = new Map<string, Map<string, string>>();
     const meta = new Map<string, Map<string, BlockMeta>>();
+    const sources = new Map<string, Map<string, string>>();
     const names = new Map<string, readonly string[]>();
 
     for (const type of listDirectories(root)) {
       const forType = new Map<string, string>();
       const metaForType = new Map<string, BlockMeta>();
+      const sourceForType = new Map<string, string>();
       for (const filename of listTextFiles(path.join(root, type))) {
         try {
           // Through the same splitter the extension host uses, so a block with
           // a header renders identically whether VS Code is running or not.
-          const file = readBlockFile(
-            fs.readFileSync(path.join(root, type, filename), 'utf8'),
-            parseYaml,
-          );
+          const raw = fs.readFileSync(path.join(root, type, filename), 'utf8');
+          const file = readBlockFile(raw, parseYaml);
           forType.set(stem(filename), file.body);
+          sourceForType.set(stem(filename), raw);
           if (file.meta) metaForType.set(stem(filename), file.meta);
         } catch {
           // One unreadable instance must not take the type offline.
@@ -84,9 +85,10 @@ export class DiskLibrary {
       }
       bodies.set(type, forType);
       meta.set(type, metaForType);
+      sources.set(type, sourceForType);
       names.set(type, [...forType.keys()]);
     }
-    return { bodies, meta, names };
+    return { bodies, meta, sources, names };
   }
 
   private readTemplates(blocks: BlockLibrary): readonly TemplateModel[] {

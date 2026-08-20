@@ -34,6 +34,8 @@ export interface BlockLibrary {
   readonly bodies: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /** Type name to instance name to its header. Always present, often empty. */
   readonly meta: ReadonlyMap<string, ReadonlyMap<string, BlockMeta>>;
+  /** The file as written, header and all — what a reader or an editor needs. */
+  readonly sources: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /** Type name to instance names — what `analyze()` needs to validate a pin. */
   readonly names: ReadonlyMap<string, readonly string[]>;
 }
@@ -41,6 +43,7 @@ export interface BlockLibrary {
 export const EMPTY_BLOCK_LIBRARY: BlockLibrary = {
   bodies: new Map(),
   meta: new Map(),
+  sources: new Map(),
   names: new Map(),
 };
 
@@ -67,6 +70,7 @@ export async function loadBlocks(
 ): Promise<BlockLibrary> {
   const bodies = new Map<string, Map<string, string>>();
   const meta = new Map<string, Map<string, BlockMeta>>();
+  const sources = new Map<string, Map<string, string>>();
   const names = new Map<string, readonly string[]>();
 
   const types = await reader.listTypes();
@@ -74,10 +78,13 @@ export async function loadBlocks(
     const instances = await reader.listInstances(type);
     const forType = new Map<string, string>();
     const metaForType = new Map<string, BlockMeta>();
+    const sourceForType = new Map<string, string>();
     for (const instance of instances) {
       try {
-        const file = readBlockFile(await reader.readInstance(type, instance), opts.parseYaml);
+        const raw = await reader.readInstance(type, instance);
+        const file = readBlockFile(raw, opts.parseYaml);
         forType.set(instance, file.body);
+        sourceForType.set(instance, raw);
         if (file.meta) metaForType.set(instance, file.meta);
       } catch {
         // An unreadable instance is skipped rather than failing the whole scan:
@@ -86,10 +93,11 @@ export async function loadBlocks(
     }
     bodies.set(type, forType);
     meta.set(type, metaForType);
+    sources.set(type, sourceForType);
     names.set(type, [...forType.keys()]);
   }
 
-  return { bodies, meta, names };
+  return { bodies, meta, sources, names };
 }
 
 export interface BlockFile {

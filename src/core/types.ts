@@ -122,6 +122,14 @@ export interface Frontmatter {
 /** The analysed template — what the composer, the MCP server, and the UI consume. */
 export interface TemplateModel {
   readonly name: string;
+  /**
+   * The file text this was loaded from, when a loader supplied it.
+   *
+   * Absent when `analyze()` is called directly on a parse result. It exists so
+   * a reader can be handed the template as written rather than a reconstruction
+   * of it - spans point into this, and an editor cannot round-trip without it.
+   */
+  readonly source?: string;
   readonly description?: string;
   readonly tags: readonly string[];
   readonly note?: string;
