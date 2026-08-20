@@ -8,25 +8,16 @@
  * renderer itself and preview on every keystroke without a round-trip. That is
  * the whole reason `core/` imports nothing: the same parser runs in the
  * extension host, the MCP bridge, and this browser frame.
+ *
+ * The panel has two screens, compose and history. It had a third listing the
+ * library, which the sidebar already is — a second grid of the same templates
+ * was one surface too many, and an editor tab is better spent on the composer.
  */
 
 import type { Field, Node } from '../core';
 
 /** Block type name to instance name to body. `Map` does not survive postMessage. */
 export type BlockBodies = Record<string, Record<string, string>>;
-
-/** One row in the library list. */
-export interface LibraryCard {
-  readonly name: string;
-  readonly description?: string;
-  readonly tags: readonly string[];
-  readonly uses: number;
-  /** ISO 8601, or absent if never composed. */
-  readonly lastUsed?: string;
-  readonly historyCount: number;
-  readonly fieldCount: number;
-  readonly errorCount: number;
-}
 
 /** One block a prompt drew on, as the feed shows it. */
 export interface BlockRef {
@@ -44,13 +35,11 @@ export interface HistoryRow {
 }
 
 /**
- * A row in the panel-wide feed.
+ * A row in the feed.
  *
- * `HistoryRow` is scoped to one template and needs no name; the feed spans all
- * of them, so it carries the template it came from, that template's tags for
- * filtering, and whether the template is still there — a run outlives the
- * template it was made from, and "create a variant" has nowhere to go once it
- * does not.
+ * It carries the template it came from, that template's tags for filtering, and
+ * whether the template is still there — a run outlives the template it was made
+ * from, and "create a variant" has nowhere to go once it does.
  */
 export interface HistoryFeedRow extends HistoryRow {
   readonly template: string;
@@ -79,20 +68,29 @@ export interface TemplateDetail {
    */
   readonly seed?: Readonly<Record<string, string>>;
   readonly seedId?: string;
-  readonly history: readonly HistoryRow[];
+  /**
+   * How often and how recently this template has been used.
+   *
+   * A line in the header, not a list. The composer used to repeat this
+   * template's runs beneath the form, which is the history screen filtered to
+   * one name — so it points there rather than reproducing it.
+   */
   readonly uses: number;
+  /** ISO 8601, absent if never composed. */
+  readonly lastUsed?: string;
   readonly diagnostics: readonly { message: string; severity: string }[];
   /** Workspace files, for `file` fields. Active editor first. */
   readonly files: readonly string[];
 }
 
 export type HostMessage =
-  | { readonly type: 'library'; readonly cards: readonly LibraryCard[]; readonly tags: readonly string[] }
   | {
       readonly type: 'history';
       readonly rows: readonly HistoryFeedRow[];
       readonly templates: readonly string[];
       readonly tags: readonly string[];
+      /** Preselect this template's chip — set when arriving from its composer. */
+      readonly focus?: string;
     }
   | { readonly type: 'template'; readonly detail: TemplateDetail }
   | { readonly type: 'notice'; readonly text: string; readonly kind: 'info' | 'warn' };
@@ -101,11 +99,12 @@ export type Delivery = 'chat' | 'clipboard' | 'editor' | 'insert';
 
 export type WebviewMessage =
   | { readonly type: 'ready' }
-  | { readonly type: 'openLibrary' }
-  | { readonly type: 'openHistory' }
+  | { readonly type: 'openHistory'; readonly template?: string }
   | { readonly type: 'variant'; readonly id: string }
   | { readonly type: 'clearAllHistory' }
   | { readonly type: 'openTemplate'; readonly name: string }
+  /** Swap templates without leaving the composer — the host shows a QuickPick. */
+  | { readonly type: 'pickTemplate' }
   | { readonly type: 'newTemplate' }
   | { readonly type: 'editTemplate'; readonly name: string }
   | {

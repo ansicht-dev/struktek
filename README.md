@@ -101,12 +101,24 @@ cannot do.
   frontmatter describe a block in the sidebar. Everything below the fence is
   what actually lands in the prompt — the header never renders.
 
-## History
+## The panel
 
-Every prompt you compose is kept in `.struktek/.runtime/history.jsonl`, which is
-git-ignored. `Struktek: Open Panel` opens the feed: newest first, searchable by
-what the prompt said, showing which template and which blocks produced it, with
-**Copy** and **Create variant** on each one.
+`Struktek: Open Panel` has two screens.
+
+**Compose** is the fields on the left and the prompt as it will be sent on the
+right, split by a divider you can drag - how much room a form needs depends on
+the template, and how much a preview needs depends on the prompt. Optional
+fields fold away so a template reads as long as it actually is. The template
+name is also the switcher.
+
+**History** is every prompt you have composed, newest first, searchable by what
+the prompt said and filterable by template and tag. Each one shows which
+template and which blocks produced it, and offers Copy and Create variant -
+which reopens the composer with the values that run actually used. Runs are
+kept in `.struktek/.runtime/history.jsonl`, which is git-ignored.
+
+There is no library screen: the sidebar is the library, and a second grid of
+the same templates was one surface too many.
 
 Prompts your agent composes over MCP land there too, tagged `mcp` — with one
 exception. When VS Code is closed the bridge reads templates straight off disk
@@ -134,7 +146,7 @@ points.
 | `Struktek: Compose Prompt` | `Ctrl+Shift+K` — pick a template, fill it, send it |
 | `Struktek: New Template` | create a blank template and open it |
 | `Struktek: New Block` | add a value to a block type, or start a new type |
-| `Struktek: Open Panel` | the history of every prompt you have produced |
+| `Struktek: Open Panel` | the composer, and the history of every prompt you have produced |
 | `Struktek: Open Template Library` | browse and edit what you have |
 | `Struktek: Configure MCP for Agent` | wire your templates into Claude Code or Codex |
 

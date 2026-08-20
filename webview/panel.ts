@@ -18,15 +18,19 @@ import type {
   HistoryFeedRow,
   HistoryRow,
   HostMessage,
-  LibraryCard,
   TemplateDetail,
   WebviewMessage,
 } from '../src/shared/panelProtocol';
 
+/** Only the split position is worth keeping; everything else arrives fresh. */
+interface PersistedState {
+  readonly splitRatio: number;
+}
+
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
-  getState(): unknown;
-  setState(state: unknown): void;
+  getState(): PersistedState | undefined;
+  setState(state: PersistedState): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
@@ -34,14 +38,13 @@ const vscode = acquireVsCodeApi();
 const root = document.getElementById('root')!;
 
 interface State {
-  view: 'history' | 'library' | 'template';
-  cards: readonly LibraryCard[];
-  allTags: readonly string[];
-  search: string;
-  activeTags: Set<string>;
+  view: 'history' | 'template';
   detail?: TemplateDetail;
   values: Record<string, string>;
-  expanded: Set<string>;
+  /** Whether the optional-field fold is open, remembered across repaints. */
+  optionalOpen: boolean;
+  /** Fraction of the composer given to the form, 0.25 to 0.75. */
+  splitRatio: number;
   /** The feed: every prompt produced, newest first, and its own filters. */
   feed: readonly HistoryFeedRow[];
   feedTemplates: readonly string[];
@@ -57,12 +60,9 @@ interface State {
 
 const state: State = {
   view: 'history',
-  cards: [],
-  allTags: [],
-  search: '',
-  activeTags: new Set(),
   values: {},
-  expanded: new Set(),
+  optionalOpen: false,
+  splitRatio: vscode.getState()?.splitRatio ?? 0.45,
   feed: [],
   feedTemplates: [],
   feedTags: [],
@@ -101,6 +101,26 @@ function on<T extends HTMLElement>(node: T, event: string, handler: (e: Event) =
 
 function post(message: WebviewMessage): void {
   vscode.postMessage(message);
+}
+
+/** A codicon, the workbench's own icon font — not a lookalike glyph. */
+function icon(name: string): HTMLElement {
+  return el('span', { class: 'codicon codicon-' + name, 'aria-hidden': 'true' });
+}
+
+/**
+ * A secondary action.
+ *
+ * Icon-only with a tooltip, the way every toolbar in the workbench works. The
+ * primary action keeps its label, because guessing which glyph sends your
+ * prompt somewhere is not a game worth playing.
+ */
+function iconButton(name: string, title: string, run: () => void): HTMLElement {
+  return on(
+    el('button', { class: 'stk-icon-button', title, 'aria-label': title }, [icon(name)]),
+    'click',
+    run,
+  );
 }
 
 /**
@@ -164,9 +184,8 @@ function compose(detail: TemplateDetail, values: Record<string, string>) {
 function nav(): HTMLElement {
   const bar = el('div', { class: 'stk-nav' });
   const items: [State['view'], string, boolean][] = [
-    ['history', 'History', true],
     ['template', 'Compose', state.detail !== undefined],
-    ['library', 'Library', true],
+    ['history', 'History', true],
   ];
   for (const [view, label, enabled] of items) {
     const item = el('button', {
@@ -179,7 +198,6 @@ function nav(): HTMLElement {
     on(item, 'click', () => {
       if (view === state.view) return;
       if (view === 'history') post({ type: 'openHistory' });
-      else if (view === 'library') post({ type: 'openLibrary' });
       else if (state.detail) post({ type: 'openTemplate', name: state.detail.name });
     });
     bar.append(item);
@@ -224,9 +242,15 @@ function renderHistoryFeed(): void {
     el('div', { class: 'stk-spacer' }),
   ]);
   if (total > 0) {
+    // Clear follows the filter. With exactly one template selected it clears
+    // that template's runs — the per-template Clear the composer used to
+    // carry, without a second button to implement it.
+    const only = state.feedActiveTemplates.size === 1 ? [...state.feedActiveTemplates][0] : undefined;
     bar.append(
-      on(el('button', { class: 'stk-ghost', text: 'Clear' }), 'click', () =>
-        post({ type: 'clearAllHistory' }),
+      iconButton(
+        'clear-all',
+        only ? 'Clear history for ' + only : 'Clear all history',
+        () => post(only ? { type: 'clearHistory', name: only } : { type: 'clearAllHistory' }),
       ),
     );
   }
@@ -328,176 +352,47 @@ function runCard(run: HistoryFeedRow): HTMLElement {
     },
   );
 
-  const actions = el('div', { class: 'stk-run-actions' }, [
-    on(el('button', { class: 'stk-ghost', text: 'Copy' }), 'click', () =>
-      post({ type: 'copyHistory', id: run.id }),
-    ),
-    on(
-      el('button', {
-        class: 'stk-ghost',
-        text: 'Create variant',
+  const variant = on(
+    el(
+      'button',
+      {
+        class: 'stk-icon-button',
         disabled: !run.templateExists,
+        'aria-label': 'Create variant',
         title: run.templateExists
-          ? 'Open the composer with these values'
+          ? 'Create variant - open the composer with these values'
           : 'The template this came from no longer exists',
-      }),
-      'click',
-      () => post({ type: 'variant', id: run.id }),
+      },
+      [icon('versions')],
     ),
+    'click',
+    () => post({ type: 'variant', id: run.id }),
+  );
+
+  const actions = el('div', { class: 'stk-run-actions' }, [
+    iconButton('copy', 'Copy prompt', () => post({ type: 'copyHistory', id: run.id })),
+    variant,
   ]);
 
   return el('div', { class: 'stk-run-card' }, [head, excerpt, refs, actions]);
 }
 
-// ── library view ──────────────────────────────────────────────────────
-
-function visibleCards(): readonly LibraryCard[] {
-  const needle = state.search.trim().toLowerCase();
-  return state.cards.filter((card) => {
-    if (state.activeTags.size > 0 && !card.tags.some((tag) => state.activeTags.has(tag))) return false;
-    if (needle.length === 0) return true;
-    return (
-      card.name.toLowerCase().includes(needle) ||
-      (card.description ?? '').toLowerCase().includes(needle) ||
-      card.tags.some((tag) => tag.includes(needle))
-    );
-  });
-}
-
-function renderLibrary(): void {
-  const bar = el('div', { class: 'stk-bar' }, [
-    el('div', {}, [
-      el('h1', { class: 'stk-title', text: 'Templates' }),
-      el('p', {
-        class: 'stk-sub',
-        text:
-          state.cards.length === 0
-            ? 'Nothing here yet.'
-            : String(state.cards.length) + ' template' + (state.cards.length === 1 ? '' : 's'),
-      }),
-    ]),
-    el('div', { class: 'stk-spacer' }),
-    on(el('button', { text: 'New Template' }), 'click', () => post({ type: 'newTemplate' })),
-  ]);
-
-  const search = el('input', {
-    type: 'search',
-    placeholder: 'Search name, description or tag',
-    value: state.search,
-  }) as HTMLInputElement;
-  on(search, 'input', () => {
-    state.search = search.value;
-    // Only the grid changes; re-rendering the whole view would steal focus
-    // mid-keystroke.
-    grid.replaceChildren(...cards());
-  });
-
-  const filters = el('div', { class: 'stk-filters' }, [search]);
-  for (const tag of state.allTags) {
-    const active = state.activeTags.has(tag);
-    filters.append(
-      on(
-        el('button', { class: 'stk-chip', 'aria-pressed': active, text: tag }),
-        'click',
-        () => {
-          if (active) state.activeTags.delete(tag);
-          else state.activeTags.add(tag);
-          renderLibrary();
-        },
-      ),
-    );
-  }
-
-  function cards(): HTMLElement[] {
-    const shown = visibleCards();
-    if (shown.length === 0) {
-      return [
-        el('div', { class: 'stk-blank' }, [
-          el('p', {
-            text:
-              state.cards.length === 0
-                ? 'No templates yet. Create one and it will show up here.'
-                : 'Nothing matches that filter.',
-          }),
-        ]),
-      ];
-    }
-    return shown.map((card) => {
-      const meta: (globalThis.Node | string)[] = [];
-      meta.push(el('span', { text: String(card.fieldCount) + ' field' + (card.fieldCount === 1 ? '' : 's') }));
-      if (card.uses > 0) meta.push(el('span', { text: String(card.uses) + ' use' + (card.uses === 1 ? '' : 's') }));
-      if (card.lastUsed) {
-        meta.push(el('span', { text: ago(card.lastUsed), title: new Date(card.lastUsed).toLocaleString() }));
-      }
-      if (card.errorCount > 0) {
-        meta.push(
-          el('span', {
-            class: 'stk-err',
-            text: String(card.errorCount) + ' error' + (card.errorCount === 1 ? '' : 's'),
-          }),
-        );
-      }
-
-      const body: (globalThis.Node | string)[] = [
-        el('div', { class: 'stk-card-top' }, [el('span', { class: 'stk-card-name', text: card.name })]),
-      ];
-      if (card.description) body.push(el('div', { class: 'stk-card-desc', text: card.description }));
-      if (card.tags.length > 0) {
-        body.push(
-          el(
-            'div',
-            { class: 'stk-tags' },
-            card.tags.map((tag) => el('span', { class: 'stk-chip stk-static', text: tag })),
-          ),
-        );
-      }
-      body.push(el('div', { class: 'stk-card-meta' }, meta));
-
-      return on(el('button', { class: 'stk-card' }, body), 'click', () =>
-        post({ type: 'openTemplate', name: card.name }),
-      );
-    });
-  }
-
-  const grid = el('div', { class: 'stk-grid' }, cards());
-  root.replaceChildren(nav(), bar, filters, grid);
-}
-
 // ── compose view ──────────────────────────────────────────────────────
 
+/**
+ * The composer: fields on the left, the prompt as it will be sent on the right.
+ *
+ * The divider between them is draggable and its position is kept, because how
+ * much room a form needs depends on the template and how much room a preview
+ * needs depends on the prompt — neither is a number to pick once for everyone.
+ */
 function renderTemplate(): void {
   const detail = state.detail;
   if (!detail) return;
 
-  const header = el('div', { class: 'stk-bar' }, [
-    on(el('button', { class: 'stk-ghost', text: '← Library' }), 'click', () =>
-      post({ type: 'openLibrary' }),
-    ),
-    el('div', {}, [
-      el('h1', { class: 'stk-title', text: detail.name }),
-      el('p', { class: 'stk-sub', text: detail.description ?? 'No description' }),
-    ]),
-    el('div', { class: 'stk-spacer' }),
-    on(el('button', { class: 'stk-ghost', text: 'Edit template' }), 'click', () =>
-      post({ type: 'editTemplate', name: detail.name }),
-    ),
-  ]);
-
-  const tagRow = el('div', { class: 'stk-tags' }, [
-    ...detail.tags.map((tag) => el('span', { class: 'stk-chip stk-static', text: tag })),
-  ]);
-  if (detail.uses > 0) {
-    tagRow.append(
-      el('span', {
-        class: 'stk-opt',
-        text: String(detail.uses) + ' use' + (detail.uses === 1 ? '' : 's'),
-      }),
-    );
-  }
-
   const preview = el('pre', { class: 'stk-preview' });
-  const status = el('span', {});
-  const form = el('div', {});
+  const status = el('span', { class: 'stk-status' });
+  const form = el('div', { class: 'stk-form' });
 
   const refresh = (): void => {
     const result = compose(detail, state.values);
@@ -510,19 +405,36 @@ function renderTemplate(): void {
     }
     const blank = result.unfilled.length;
     status.textContent =
-      blank === 0
-        ? String(result.text.length) + ' characters'
-        : String(blank) + ' field' + (blank === 1 ? '' : 's') + ' blank';
-    status.className = blank === 0 ? '' : 'stk-warn';
+      String(result.text.length) + ' chars' +
+      (blank === 0 ? '' : ' \u00b7 ' + String(blank) + ' blank');
+    status.className = blank === 0 ? 'stk-status' : 'stk-status stk-warn';
   };
 
-  for (const field of detail.fields) {
-    form.append(fieldControl(detail, field, refresh));
-  }
-  if (detail.fields.length === 0) {
-    form.append(el('p', { class: 'stk-hint', text: 'This template has no fields — it composes as written.' }));
+  // Required fields carry the form; optional ones fold away, since a template
+  // with two of them should not read as a longer form than it is.
+  const required = detail.fields.filter((field) => field.required);
+  const optional = detail.fields.filter((field) => !field.required);
+  for (const field of required) form.append(fieldControl(detail, field, refresh));
+
+  if (optional.length > 0) {
+    // Anything already carrying a value is not hidden — a sticky value or a
+    // varied run must never sit silently behind a fold.
+    const filled = optional.some((field) => (state.values[field.name] ?? '').length > 0);
+    const open = state.optionalOpen || filled;
+    const fold = el('details', { class: 'stk-fold', open }) as HTMLDetailsElement;
+    fold.append(el('summary', { text: 'Optional (' + String(optional.length) + ')' }));
+    for (const field of optional) fold.append(fieldControl(detail, field, refresh));
+    on(fold, 'toggle', () => {
+      state.optionalOpen = fold.open;
+    });
+    form.append(fold);
   }
 
+  if (detail.fields.length === 0) {
+    form.append(
+      el('p', { class: 'stk-hint', text: 'This template has no fields — it composes as written.' }),
+    );
+  }
   for (const diagnostic of detail.diagnostics) {
     form.append(
       el('p', {
@@ -538,24 +450,118 @@ function renderTemplate(): void {
   };
 
   const pane = el('div', { class: 'stk-pane' }, [
-    el('div', { class: 'stk-pane-head' }, [el('span', { text: 'Preview' }), el('div', { class: 'stk-spacer' }), status]),
+    el('div', { class: 'stk-pane-head' }, [
+      status,
+      el('div', { class: 'stk-spacer' }),
+      iconButton('copy', 'Copy', deliver('clipboard')),
+      iconButton('insert', 'Insert at cursor', deliver('insert')),
+      iconButton('go-to-file', 'Open in editor', deliver('editor')),
+    ]),
     preview,
     el('div', { class: 'stk-actions' }, [
-      on(el('button', { text: 'Send to Chat' }), 'click', deliver('chat')),
-      on(el('button', { class: 'stk-ghost', text: 'Copy' }), 'click', deliver('clipboard')),
-      on(el('button', { class: 'stk-ghost', text: 'Insert' }), 'click', deliver('insert')),
-      on(el('button', { class: 'stk-ghost', text: 'Open' }), 'click', deliver('editor')),
+      // The one button that sends your prompt somewhere keeps its label; an
+      // icon alone there would be a guess.
+      on(
+        el('button', { class: 'stk-primary' }, [icon('send'), el('span', { text: 'Send to Chat' })]),
+        'click',
+        deliver('chat'),
+      ),
+      el('div', { class: 'stk-spacer' }),
+      iconButton('clear-all', 'Reset fields', () => {
+        state.values = {};
+        renderTemplate();
+      }),
     ]),
   ]);
 
   refresh();
-  root.replaceChildren(
-    nav(),
-    header,
-    tagRow,
-    el('div', { class: 'stk-split' }, [form, pane]),
-    renderHistory(detail),
+  root.replaceChildren(nav(), composerHeader(detail), split(form, pane));
+}
+
+/** Name, tags, how often it has been used, and the way out to its file. */
+function composerHeader(detail: TemplateDetail): HTMLElement {
+  const name = on(
+    el('button', { class: 'stk-switch', title: 'Switch template' }, [
+      el('span', { class: 'stk-title', text: detail.name }),
+      icon('chevron-down'),
+    ]),
+    'click',
+    () => post({ type: 'pickTemplate' }),
   );
+
+  const bar = el('div', { class: 'stk-bar' }, [name]);
+  for (const tag of detail.tags) bar.append(el('span', { class: 'stk-chip stk-static', text: tag }));
+  bar.append(el('div', { class: 'stk-spacer' }));
+
+  // A pointer at the history screen, not a copy of it.
+  if (detail.uses > 0) {
+    const summary =
+      String(detail.uses) + '\u00d7' + (detail.lastUsed ? ' \u00b7 ' + ago(detail.lastUsed) : '');
+    bar.append(
+      on(
+        el('button', { class: 'stk-link', title: 'History for this template' }, [
+          el('span', { text: summary }),
+          icon('history'),
+        ]),
+        'click',
+        () => post({ type: 'openHistory', template: detail.name }),
+      ),
+    );
+  }
+  bar.append(
+    iconButton('edit', 'Edit template file', () => post({ type: 'editTemplate', name: detail.name })),
+  );
+
+  const head = el('div', { class: 'stk-head' }, [bar]);
+  if (detail.description) head.append(el('p', { class: 'stk-sub', text: detail.description }));
+  return head;
+}
+
+/**
+ * Two panes and a divider you can drag.
+ *
+ * The ratio lives in the frame's state rather than being recomputed, so it
+ * survives a repaint — and every repaint is total, since the form is rebuilt
+ * whenever a value changes.
+ */
+function split(left: HTMLElement, right: HTMLElement): HTMLElement {
+  const wrap = el('div', { class: 'stk-split' });
+  const divider = el('div', {
+    class: 'stk-divider',
+    role: 'separator',
+    'aria-orientation': 'vertical',
+  });
+  left.classList.add('stk-pane-left');
+  right.classList.add('stk-pane-right');
+  wrap.append(left, divider, right);
+
+  const apply = (): void => {
+    left.style.flexBasis = String(state.splitRatio * 100) + '%';
+  };
+  apply();
+
+  divider.addEventListener('pointerdown', (event) => {
+    const start = event as PointerEvent;
+    start.preventDefault();
+    divider.setPointerCapture(start.pointerId);
+    const move = (moved: Event): void => {
+      const box = wrap.getBoundingClientRect();
+      if (box.width === 0) return;
+      // Clamped so neither pane can be dragged out of existence.
+      const x = (moved as PointerEvent).clientX;
+      state.splitRatio = Math.min(0.75, Math.max(0.25, (x - box.left) / box.width));
+      apply();
+    };
+    const up = (): void => {
+      divider.removeEventListener('pointermove', move);
+      divider.removeEventListener('pointerup', up);
+      vscode.setState({ splitRatio: state.splitRatio });
+    };
+    divider.addEventListener('pointermove', move);
+    divider.addEventListener('pointerup', up);
+  });
+
+  return wrap;
 }
 
 function fieldControl(detail: TemplateDetail, field: Field, refresh: () => void): HTMLElement {
@@ -621,104 +627,20 @@ function fieldControl(detail: TemplateDetail, field: Field, refresh: () => void)
   return wrap;
 }
 
-function renderHistory(detail: TemplateDetail): HTMLElement {
-  const section = el('div', { class: 'stk-section' });
-  const head = el('div', { class: 'stk-section-head' }, [
-    el('h2', { class: 'stk-h2', text: 'History' }),
-    el('span', {
-      class: 'stk-opt',
-      text:
-        detail.history.length === 0
-          ? 'nothing yet'
-          : String(detail.history.length) + ' generated',
-    }),
-    el('div', { class: 'stk-spacer' }),
-  ]);
-  if (detail.history.length > 0) {
-    head.append(
-      on(el('button', { class: 'stk-ghost', text: 'Clear' }), 'click', () =>
-        post({ type: 'clearHistory', name: detail.name }),
-      ),
-    );
-  }
-  section.append(head);
-
-  if (detail.history.length === 0) {
-    section.append(
-      el('p', {
-        class: 'stk-hint',
-        text: 'Every prompt you generate from this template is kept here, so you can find it again or send it a second time.',
-      }),
-    );
-    return section;
-  }
-
-  for (const entry of detail.history) {
-    section.append(historyRow(entry));
-  }
-  return section;
-}
-
-function historyRow(entry: HistoryRow): HTMLElement {
-  const open = state.expanded.has(entry.id);
-  const row = el('div', { class: 'stk-run' });
-
-  const toggle = on(
-    el('button', { class: 'stk-run-head' }, [
-      el('span', { class: 'stk-when', text: ago(entry.at), title: new Date(entry.at).toLocaleString() }),
-      el('span', { class: 'stk-run-line', text: firstLine(entry.prompt) }),
-      entry.via ? el('span', { class: 'stk-opt', text: entry.via }) : el('span', {}),
-    ]),
-    'click',
-    () => {
-      if (open) state.expanded.delete(entry.id);
-      else state.expanded.add(entry.id);
-      renderTemplate();
-    },
-  );
-  row.append(toggle);
-
-  if (!open) return row;
-
-  const body = el('div', { class: 'stk-run-body' }, [el('pre', { text: entry.prompt })]);
-  const actions = el('div', { class: 'stk-tags' }, [
-    on(el('button', { class: 'stk-ghost', text: 'Copy' }), 'click', () =>
-      post({ type: 'copyHistory', id: entry.id }),
-    ),
-    // The reason history is worth keeping: recover the inputs, not just the
-    // output, and adjust one of them rather than retyping all of them.
-    on(el('button', { class: 'stk-ghost', text: 'Reuse these values' }), 'click', () => {
-      state.values = { ...entry.values };
-      renderTemplate();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }),
-  ]);
-  body.append(actions);
-  row.append(body);
-  return row;
-}
-
 // ── host messages ─────────────────────────────────────────────────────
 
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   const message = event.data;
-  if (message.type === 'library') {
-    state.view = 'library';
-    state.cards = message.cards;
-    state.allTags = message.tags;
-    // Drop filters for tags that no longer exist, or the list silently hides
-    // everything with no way to tell why.
-    for (const tag of [...state.activeTags]) {
-      if (!message.tags.includes(tag)) state.activeTags.delete(tag);
-    }
-    renderLibrary();
-    return;
-  }
   if (message.type === 'history') {
     state.view = 'history';
     state.feed = message.rows;
     state.feedTemplates = message.templates;
     state.feedTags = message.tags;
+    // Arriving from a template's composer opens the feed already narrowed to it.
+    if (message.focus) {
+      state.feedActiveTemplates = new Set([message.focus]);
+      state.feedSearch = '';
+    }
     // Drop filters for things that no longer exist, or the feed silently hides
     // everything with no way to tell why.
     for (const name of [...state.feedActiveTemplates]) {
@@ -740,7 +662,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
     state.detail = detail;
     if (detail.seedId !== undefined) state.seedId = detail.seedId;
     if (switching) {
-      state.expanded.clear();
+      state.optionalOpen = false;
       // Seed from the run being varied when there is one, else from last-used
       // values and any pinned default the author set.
       state.values = {};

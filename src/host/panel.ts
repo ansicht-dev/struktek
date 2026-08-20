@@ -22,7 +22,7 @@ import type {
   HistoryFeedRow,
   HistoryRow,
   HostMessage,
-  LibraryCard,
+
   TemplateDetail,
   WebviewMessage,
 } from '../shared/panelProtocol';
@@ -36,7 +36,7 @@ export interface PanelDeps {
 }
 
 /** Which screen the frame is on, so a repaint does not move it. */
-type Screen = 'history' | 'library' | 'template';
+type Screen = 'history' | 'template';
 
 export class StruktekPanel {
   private panel: vscode.WebviewPanel | undefined;
@@ -112,7 +112,6 @@ export class StruktekPanel {
 
   private push(): void {
     if (this.screen === 'template' && this.current) void this.pushTemplate(this.current);
-    else if (this.screen === 'library') this.pushLibrary();
     else this.pushHistory();
   }
 
@@ -123,7 +122,7 @@ export class StruktekPanel {
    * tags and say whether it still exists — the entry itself only knows a name,
    * and a name outlives the file behind it.
    */
-  private pushHistory(): void {
+  private pushHistory(focus?: string): void {
     const deps = this.deps();
     if (!deps) return;
     const { library, history } = deps;
@@ -140,35 +139,10 @@ export class StruktekPanel {
 
     const templates = [...new Set(rows.map((row) => row.template))];
     const tags = [...new Set(rows.flatMap((row) => row.tags))].sort((a, b) => a.localeCompare(b));
-    this.send({ type: 'history', rows, templates, tags });
-  }
-
-  private pushLibrary(): void {
-    const deps = this.deps();
-    if (!deps) return;
-    const { library, stats, history } = deps;
-
-    const cards: LibraryCard[] = library.list().map((entry) => {
-      const { model } = entry;
-      return {
-        name: model.name,
-        ...(model.description ? { description: model.description } : {}),
-        tags: model.tags,
-        uses: stats.uses(model.name),
-        ...(history.lastUsed(model.name) ? { lastUsed: history.lastUsed(model.name)! } : {}),
-        historyCount: history.count(model.name),
-        fieldCount: model.fields.length,
-        errorCount: model.diagnostics.filter((d) => d.severity === 'error').length,
-      };
-    });
-
-    // Most-used first, mirroring the picker: the list should reflect what you
-    // actually reach for, not what happens to sort first.
-    const order = stats.order(cards.map((card) => card.name));
-    cards.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
-
-    const tags = [...new Set(cards.flatMap((card) => card.tags))].sort((a, b) => a.localeCompare(b));
-    this.send({ type: 'library', cards, tags });
+    // A focus only survives if that template actually has runs; otherwise the
+    // feed would open filtered to nothing.
+    const focused = focus && templates.includes(focus) ? { focus } : {};
+    this.send({ type: 'history', rows, templates, tags, ...focused });
   }
 
   private async pushTemplate(name: string): Promise<void> {
@@ -214,8 +188,8 @@ export class StruktekPanel {
       blockNames,
       sticky,
       ...(seed ? { seed: seed.values, seedId: seed.id } : {}),
-      history: history.for(name).map((run) => toRow(run, entry.model.fields)),
       uses: stats.uses(name),
+      ...(history.lastUsed(name) ? { lastUsed: history.lastUsed(name)! } : {}),
       diagnostics: entry.model.diagnostics.map((d) => ({ message: d.message, severity: d.severity })),
       files: await workspaceFiles(),
     };
@@ -231,15 +205,28 @@ export class StruktekPanel {
         this.push();
         return;
 
-      case 'openLibrary':
-        this.screen = 'library';
-        this.pushLibrary();
-        return;
-
       case 'openHistory':
         this.screen = 'history';
-        this.pushHistory();
+        this.pushHistory(message.template);
         return;
+
+      case 'pickTemplate': {
+        // The native picker rather than a grid inside the frame: the sidebar is
+        // the library, and this is only a way to swap without leaving.
+        const picked = await vscode.window.showQuickPick(
+          deps.library.list().map((entry) => ({
+            label: entry.model.name,
+            ...(entry.model.description ? { detail: entry.model.description } : {}),
+          })),
+          { title: 'Struktek - Compose', placeHolder: 'Which template?', matchOnDetail: true },
+        );
+        if (!picked) return;
+        this.current = picked.label;
+        this.screen = 'template';
+        this.seed = undefined;
+        await this.pushTemplate(picked.label);
+        return;
+      }
 
       case 'openTemplate':
         this.current = message.name;

@@ -2,9 +2,9 @@
  * The panel's HTML shell and the styles only it uses.
  *
  * The shell, the CSP and every rescue of a browser default live in
- * `webviewHtml.ts`, shared with the sidebar's search frame. What is left here
- * is the panel's own layout: the library grid, the compose split, the history
- * feed. All of it still obeys the rule stated there — no literal colour, ever.
+ * `webviewHtml.ts`, shared with the sidebar. What is left here
+ * is the panel's own layout: the compose split and the history feed. All of
+ * it still obeys the rule stated there — no literal colour, ever.
  *
  * All styling lives here; the webview modules only ever set `className`.
  */
@@ -18,6 +18,7 @@ export function buildPanelHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     extensionUri,
     script: 'panel.js',
     title: 'Struktek',
+    codicons: true,
     styles: STYLES,
     body: '<div id="root"></div>',
   });
@@ -51,39 +52,75 @@ const STYLES = `
 .stk-sub { color: var(--vscode-descriptionForeground); margin: 2px 0 0; }
 .stk-spacer { flex: 1; }
 
-/* ── library ────────────────────────────────────────────── */
+/* Shared by the history feed's search row. */
 .stk-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
 .stk-filters input { flex: 1; min-width: 200px; }
 
+/* ── actions ────────────────────────────────────────────── */
+/* Secondary actions are icon-only with a tooltip, the way workbench toolbars
+   are. Only the button that sends the prompt somewhere keeps a label. */
+.stk-icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border-radius: 5px;
+  background: transparent; color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+}
+.stk-icon-button:hover { background: var(--vscode-toolbar-hoverBackground); }
+.stk-primary { display: inline-flex; align-items: center; gap: 6px; }
 
-.stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; }
-.stk-card {
-  text-align: left; width: 100%;
-  padding: 13px 15px; border-radius: 6px; cursor: pointer;
-  background: var(--vscode-editorWidget-background);
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
-  color: var(--vscode-foreground);
-  display: flex; flex-direction: column; gap: 7px;
+/* The template name doubles as the switcher, so it has to look pressable
+   without becoming a button-shaped box around a heading. */
+.stk-switch {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 6px; border-radius: 4px;
+  background: transparent; color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
 }
-.stk-card:hover { border-color: var(--vscode-focusBorder); background: var(--vscode-list-hoverBackground); }
-.stk-card-top { display: flex; align-items: baseline; gap: 8px; }
-.stk-card-name { font-weight: 600; }
-.stk-card-desc {
-  color: var(--vscode-descriptionForeground); font-size: .92em; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.stk-switch:hover { background: var(--vscode-toolbar-hoverBackground); }
+.stk-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 6px; border-radius: 4px; font-size: .86em;
+  background: transparent; color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
 }
-.stk-card-meta {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  font-size: .84em; color: var(--vscode-descriptionForeground);
-}
+.stk-link:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
+.stk-head { margin-bottom: 14px; }
+.stk-head .stk-bar { margin-bottom: 0; }
+.stk-status { font-variant-numeric: tabular-nums; }
 
 /* Colour marks ordered state only, and never alone - the warning carries text. */
 .stk-warn { color: var(--vscode-editorWarning-foreground); }
 .stk-err { color: var(--vscode-editorError-foreground); }
 
 /* ── compose ────────────────────────────────────────────── */
-.stk-split { display: grid; grid-template-columns: minmax(280px, 4fr) minmax(300px, 5fr); gap: 20px; align-items: start; }
-@media (max-width: 860px) { .stk-split { grid-template-columns: 1fr; } }
+/* Flex rather than a grid, because the divider sets the left pane's basis as
+   you drag it and a grid template would have to be rewritten instead. */
+.stk-split { display: flex; align-items: stretch; min-height: 0; }
+.stk-pane-left { flex: 0 0 auto; min-width: 0; overflow: hidden; }
+.stk-pane-right { flex: 1 1 0; min-width: 0; }
+
+.stk-divider {
+  flex: 0 0 auto; width: 11px; cursor: col-resize;
+  /* A hair-line rule centred in a grabbable strip: the target is wide enough
+     to hit, the line is thin enough not to read as a border. */
+  background:
+    linear-gradient(to right, transparent 5px, var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)) 5px 6px, transparent 6px);
+}
+.stk-divider:hover, .stk-divider:active {
+  background:
+    linear-gradient(to right, transparent 5px, var(--vscode-focusBorder) 5px 6px, transparent 6px);
+}
+
+/* Optional fields fold away; the disclosure is a row, not a heading. */
+.stk-fold { margin: 4px 0 13px; }
+.stk-fold > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  padding: 3px 0; font-size: .86em; color: var(--vscode-descriptionForeground);
+}
+.stk-fold > summary:hover { color: var(--vscode-foreground); }
+.stk-fold > summary::-webkit-details-marker { display: none; }
+.stk-fold > summary::before { content: '\\25b8 '; }
+.stk-fold[open] > summary::before { content: '\\25be '; }
 
 .stk-field { margin-bottom: 13px; }
 .stk-label { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; }
@@ -96,7 +133,7 @@ const STYLES = `
 .stk-hint { color: var(--vscode-descriptionForeground); font-size: .86em; margin: 3px 0 0; }
 
 .stk-pane {
-  position: sticky; top: 20px;
+  display: flex; flex-direction: column;
   border-radius: 6px; overflow: hidden;
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
   background: var(--vscode-textCodeBlock-background, var(--vscode-editorWidget-background));
@@ -108,11 +145,12 @@ const STYLES = `
   border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
 }
 .stk-preview {
+  flex: 1 1 auto;
   margin: 0; padding: 14px;
   font-family: var(--vscode-editor-font-family);
   font-size: var(--vscode-editor-font-size, .92em);
   line-height: 1.55; white-space: pre-wrap; word-break: break-word;
-  max-height: 52vh; overflow: auto;
+  min-height: 220px; max-height: 62vh; overflow: auto;
 }
 .stk-empty-slot { color: var(--vscode-descriptionForeground); font-style: italic; }
 .stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)); }
@@ -143,34 +181,10 @@ const STYLES = `
 .stk-ref { display: flex; gap: 5px; flex-wrap: wrap; }
 .stk-run-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ── per-template history ───────────────────────────────── */
-.stk-section { margin-top: 30px; }
-.stk-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.stk-h2 { font-size: 1.05em; font-weight: 600; margin: 0; }
-
-.stk-run {
-  border-radius: 5px; margin-bottom: 7px;
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
-  background: var(--vscode-editorWidget-background);
-}
-.stk-run-head {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 8px 12px; cursor: pointer; text-align: left;
-  background: transparent; border: none; color: var(--vscode-foreground);
-}
-.stk-run-head:hover { background: var(--vscode-list-hoverBackground); }
+/* The feed keeps a tabular timestamp; everything else here was the composer
+   repeating the same rows, which the history screen now owns alone. */
 .stk-when { font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground); font-size: .86em; }
-.stk-run-line {
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--vscode-descriptionForeground); font-size: .9em;
-}
-.stk-run-body { padding: 0 12px 12px; }
-.stk-run-body pre {
-  margin: 0 0 9px; padding: 11px; border-radius: 4px;
-  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
-  font-family: var(--vscode-editor-font-family); font-size: .88em;
-  white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto;
-}
+
 
 .stk-blank {
   text-align: center; padding: 54px 20px;
