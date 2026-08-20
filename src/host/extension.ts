@@ -20,6 +20,7 @@ import { McpServerHost } from './mcpServer';
 import { StruktekPanel } from './panel';
 import { SidebarViewProvider, SIDEBAR_VIEW_ID } from './sidebarView';
 import { newBlockBody, newTemplateBody, seedLibrary } from './seed';
+import { registerTemplateEditor } from './templateEditor';
 import { Stats } from './stats';
 
 interface Session {
@@ -77,6 +78,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   refreshTree = () => sidebar.refresh();
   refreshTree();
+
+  // Squiggles, highlighting and completions inside template files. Registered
+  // once and pointed at whichever session is live, like the views.
+  context.subscriptions.push(registerTemplateEditor(() => session?.library));
 
   const panel = new StruktekPanel(context.extensionUri, () =>
     session ? { library: session.library, stats: session.stats, history: session.history } : undefined,

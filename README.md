@@ -115,6 +115,18 @@ prompts composed in a bare terminal are not recorded.
 
 Keep more or fewer with `struktek.history.limit`, or `0` to keep none.
 
+## In the editor
+
+Open a template and Struktek works on it directly: unknown types, conflicting
+annotations and unmatched brackets appear in the Problems panel on the right
+character, placeholders are highlighted, hovering a field says what it resolves
+to, and typing `:` or `=` completes the built-in types, your own block types,
+and the values a block type has.
+
+Templates stay ordinary Markdown - no special extension. The editor features
+apply to files under your library folder, wherever `struktek.libraryPath`
+points.
+
 ## Commands
 
 | Command | |
