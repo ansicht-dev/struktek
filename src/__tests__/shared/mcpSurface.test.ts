@@ -20,6 +20,11 @@ import {
   promptDefinitions,
   promptMessages,
   TOOL_DEFINITIONS,
+  toolDefinitionsFor,
+  saveBlockPayload,
+  saveTemplatePayload,
+  SAVE_BLOCK_TOOL,
+  SAVE_TEMPLATE_TOOL,
   type LibraryView,
 } from '../../shared/mcpSurface';
 
@@ -204,14 +209,91 @@ describe('callToolDirect', () => {
     expect(JSON.parse(result.content[0]!.text).error).toContain('struktek_nonesuch');
   });
 
-  it('every advertised tool is dispatchable', () => {
-    // Guards against a tool being listed in TOOL_DEFINITIONS — which is what the
-    // offline bridge advertises — but never wired into the dispatcher.
-    for (const tool of TOOL_DEFINITIONS) {
+  it('every tool a view advertises is dispatchable by that view', () => {
+    // Guards against a tool being advertised — which is what the offline bridge
+    // does with this list — but never wired into the dispatcher.
+    for (const tool of toolDefinitionsFor(view())) {
       const result = callToolDirect(view(), tool.name, { template: 'code-review' });
       const error: unknown = JSON.parse(result.content[0]!.text).error;
       expect(typeof error === 'string' ? error : '').not.toMatch(/^Unknown tool/);
     }
+  });
+});
+
+describe('what a view is allowed to advertise', () => {
+  const writer = { saveTemplate: async () => undefined, saveBlock: async () => undefined };
+  const writable = (): LibraryView => ({ ...view(), write: writer });
+
+  it('offers only the read-only pair when nothing can write', () => {
+    // With VS Code closed there is nothing watching for a write, so a save tool
+    // would be listed and unrunnable — worse than absent.
+    expect(toolDefinitionsFor(view()).map((tool) => tool.name)).toEqual([
+      LIST_TEMPLATES_TOOL,
+      COMPOSE_TOOL,
+    ]);
+  });
+
+  it('adds the save tools once a writer is supplied', () => {
+    expect(toolDefinitionsFor(writable()).map((tool) => tool.name)).toContain(SAVE_TEMPLATE_TOOL);
+    expect(toolDefinitionsFor(writable()).map((tool) => tool.name)).toContain(SAVE_BLOCK_TOOL);
+  });
+
+  it('marks reading safe and writing not, so a client can tell them apart', () => {
+    const byName = new Map(TOOL_DEFINITIONS.map((tool) => [tool.name, tool]));
+    expect(byName.get(LIST_TEMPLATES_TOOL)?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.get(COMPOSE_TOOL)?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.get(SAVE_TEMPLATE_TOOL)?.annotations?.readOnlyHint).toBe(false);
+    // Saving replaces by name rather than removing anything.
+    expect(byName.get(SAVE_TEMPLATE_TOOL)?.annotations?.destructiveHint).toBe(false);
+    expect(byName.get(SAVE_TEMPLATE_TOOL)?.annotations?.idempotentHint).toBe(true);
+  });
+});
+
+describe('saving', () => {
+  it('refuses when nothing can write, and says why', async () => {
+    const result = await saveTemplatePayload(view(), 'scratch', 'body');
+    expect(result.saved).toBeUndefined();
+    expect(result.error).toContain('VS Code is not running');
+  });
+
+  it('writes the body through and answers with the resource uri', async () => {
+    const saved: string[] = [];
+    const writable: LibraryView = {
+      ...view(),
+      write: {
+        saveTemplate: async (name, body) => {
+          saved.push(name + ':' + body);
+        },
+        saveBlock: async () => undefined,
+      },
+    };
+    const result = await saveTemplatePayload(writable, 'scratch', 'Hello {{ who }}');
+    expect(saved).toEqual(['scratch:Hello {{ who }}']);
+    expect(result.saved).toBe('struktek://template/scratch');
+  });
+
+  it('refuses a name that is not a usable filename', async () => {
+    const writable: LibraryView = {
+      ...view(),
+      write: { saveTemplate: async () => undefined, saveBlock: async () => undefined },
+    };
+    for (const name of ['', '  ', 'has space', '../escape']) {
+      const result = await saveTemplatePayload(writable, name, 'body');
+      expect(result.saved, name).toBeUndefined();
+      expect(result.error, name).toBeTruthy();
+    }
+  });
+
+  it('checks both halves of a block name', async () => {
+    const writable: LibraryView = {
+      ...view(),
+      write: { saveTemplate: async () => undefined, saveBlock: async () => undefined },
+    };
+    expect((await saveBlockPayload(writable, 'depth', '../escape', 'b')).error).toBeTruthy();
+    expect((await saveBlockPayload(writable, 'has space', 'quick', 'b')).error).toBeTruthy();
+    expect((await saveBlockPayload(writable, 'depth', 'quick', 'b')).saved).toBe(
+      'struktek://block/depth/quick',
+    );
   });
 });
 
@@ -248,5 +330,53 @@ describe('composePayload value checking', () => {
     const result = composePayload(view(), 'code-review', { target: 'a.ts', focus: 'security' });
     expect(result.error).toBeUndefined();
     expect(result.prompt).toContain('security');
+  });
+});
+
+describe('saving a template that would not parse', () => {
+  const writable = (saved: string[]): LibraryView => ({
+    ...view(),
+    write: {
+      parseYaml,
+      saveTemplate: async (name, body) => {
+        saved.push(name + ':' + body);
+      },
+      saveBlock: async () => undefined,
+    },
+  });
+
+  it('refuses an unknown block type and writes nothing', async () => {
+    // The tool description promises this; without it an agent could file a
+    // broken template into someone's library and only find out much later.
+    const saved: string[] = [];
+    const result = await saveTemplatePayload(
+      writable(saved),
+      'probe',
+      'Check {{ target: file }} using {{ depth: dpeth }}.',
+    );
+    expect(result.saved).toBeUndefined();
+    expect(result.error).toContain('Nothing was written');
+    expect(result.error).toContain('dpeth');
+    expect(saved).toEqual([]);
+  });
+
+  it('refuses a field annotated two different ways', async () => {
+    const saved: string[] = [];
+    const result = await saveTemplatePayload(
+      writable(saved),
+      'probe',
+      '{{ a: number }} and {{ a: file }}',
+    );
+    expect(result.error).toContain('Nothing was written');
+    expect(saved).toEqual([]);
+  });
+
+  it('allows a warning through, since that is the author to judge', async () => {
+    // An unmatched bracket degrades to literal text on purpose - `[see notes]`
+    // is prose, and refusing it would make the rule wrong rather than strict.
+    const saved: string[] = [];
+    const result = await saveTemplatePayload(writable(saved), 'probe', 'see [ notes {{ a }}');
+    expect(result.error).toBeUndefined();
+    expect(saved).toHaveLength(1);
   });
 });

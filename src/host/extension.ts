@@ -11,10 +11,12 @@
  */
 
 import * as vscode from 'vscode';
+import { parse as parseYaml } from 'yaml';
 import { composeCommand } from './compose';
 import { configureMcpCommand } from './configureMcp';
 import { blockRefs, History } from './history';
 import { BLOCKS_DIR, Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
+import type { LibraryWriter } from '../shared/mcpSurface';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
 import { McpStatus, MCP_STATUS_COMMAND } from './mcpStatus';
@@ -298,6 +300,10 @@ async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promi
         const fields = current.library.get(template)?.model.fields ?? [];
         current.history.record(template, values, prompt, 'mcp', blockRefs(fields, values));
       },
+      // Only the running extension writes. The watcher picks the change up and
+      // repaints the sidebar and the panel, which is the whole reason the
+      // offline bridge does not offer these tools.
+      write: libraryWriter(current.library),
     }),
     onSessionsChanged: () => mcpStatus?.update(host.agents),
   });
@@ -311,6 +317,31 @@ async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promi
     // The only state you could not previously discover without opening the log.
     mcpStatus?.set({ kind: 'failed', reason: String(err) });
   }
+}
+
+/**
+ * Writing a template or a block on an agent\u2019s behalf.
+ *
+ * Deliberately thin: it writes the bytes and reloads, and refuses nothing.
+ * What may be written is decided in `mcpSurface`, so the same rules apply
+ * however the call arrives.
+ */
+function libraryWriter(library: Library): LibraryWriter {
+  const write = async (uri: vscode.Uri, body: string): Promise<void> => {
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(body, 'utf8'));
+    // Reload rather than waiting on the watcher: an agent that saves and
+    // immediately composes must not read the previous version back.
+    await library.reload();
+    log("Saved through MCP", { file: uri.toString() });
+  };
+
+  return {
+    parseYaml,
+    saveTemplate: (name, body) =>
+      write(vscode.Uri.joinPath(library.root, TEMPLATES_DIR, name + '.md'), body),
+    saveBlock: (type, instance, body) =>
+      write(vscode.Uri.joinPath(library.root, BLOCKS_DIR, type, instance + '.md'), body),
+  };
 }
 
 function extensionVersion(): string {

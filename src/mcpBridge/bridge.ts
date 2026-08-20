@@ -19,9 +19,15 @@ import {
   CallToolRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type CallToolResult,
   type GetPromptResult,
+  type ListResourcesResult,
+  type ListResourceTemplatesResult,
+  type ReadResourceResult,
   type ListPromptsResult,
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -32,7 +38,11 @@ import {
   callToolDirect,
   promptDefinitions,
   promptMessages,
-  TOOL_DEFINITIONS,
+  toolDefinitionsFor,
+  readResource,
+  resourceEntries,
+  RESOURCE_SCHEME,
+  SERVER_INSTRUCTIONS,
   type LibraryView,
 } from '../shared/mcpSurface';
 import { DiskLibrary } from './diskLibrary';
@@ -65,7 +75,10 @@ export async function connectBridge(
   const workspaceRoot = resolveWorkspaceRoot(options);
   const server = new Server(
     { name: BRIDGE_NAME, version: BRIDGE_VERSION },
-    { capabilities: { tools: {}, prompts: {} } },
+    {
+      capabilities: { tools: {}, prompts: {}, resources: {} },
+      instructions: SERVER_INSTRUCTIONS,
+    },
   );
 
   const upstream = new Upstream({
@@ -127,7 +140,54 @@ export async function connectBridge(
   server.setRequestHandler(ListToolsRequestSchema, (request) =>
     serve<ListToolsResult>(
       (client) => client.listTools(request.params) as Promise<ListToolsResult>,
-      () => ({ tools: TOOL_DEFINITIONS.map((tool) => ({ ...tool })) }),
+      // What the DISK view can run, which is the read-only pair: with VS Code
+      // closed there is nothing watching for a write.
+      () => ({ tools: toolDefinitionsFor(diskView()).map((tool) => ({ ...tool })) }),
+    ),
+  );
+
+  server.setRequestHandler(ListResourcesRequestSchema, (request) =>
+    serve<ListResourcesResult>(
+      (client) => client.listResources(request.params) as Promise<ListResourcesResult>,
+      () => ({ resources: resourceEntries(diskView()) }),
+    ),
+  );
+
+  // Templates rather than fixed uris, so a client can see the shape of what
+  // is addressable even before the list is fetched.
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, (request) =>
+    serve<ListResourceTemplatesResult>(
+      (client) =>
+        client.listResourceTemplates(request.params) as Promise<ListResourceTemplatesResult>,
+      () => ({
+        resourceTemplates: [
+          {
+            uriTemplate: RESOURCE_SCHEME + 'template/{name}',
+            name: 'template',
+            description: 'A prompt template as written, frontmatter included.',
+            mimeType: 'text/markdown',
+          },
+          {
+            uriTemplate: RESOURCE_SCHEME + 'block/{type}/{instance}',
+            name: 'block',
+            description: 'One value of a block type, as written.',
+            mimeType: 'text/markdown',
+          },
+        ],
+      }),
+    ),
+  );
+
+  server.setRequestHandler(ReadResourceRequestSchema, (request) =>
+    serve<ReadResourceResult>(
+      (client) => client.readResource(request.params) as Promise<ReadResourceResult>,
+      () => {
+        const contents = readResource(diskView(), request.params.uri);
+        if (!contents) {
+          throw new Error('No such struktek resource: ' + request.params.uri);
+        }
+        return { contents: [contents] };
+      },
     ),
   );
 

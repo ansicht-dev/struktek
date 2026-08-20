@@ -65,6 +65,23 @@ describe('offline bridge', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(['struktek_compose', 'struktek_list_templates']);
   });
 
+  it('advertises its resources, which only reach a client through here', async () => {
+    // The inner server registering a resource is not enough: every client talks
+    // to the bridge, so anything it does not forward may as well not exist.
+    const { resources } = await client.listResources();
+    expect(resources.map((r) => r.uri)).toContain('struktek://template/greet');
+  });
+
+  it('reads a template back as written, frontmatter and all', async () => {
+    const result = await client.readResource({ uri: 'struktek://template/greet' });
+    const text = String((result.contents as { text: string }[])[0]!.text);
+    expect(text).toContain('{{');
+  });
+
+  it('refuses a uri that names nothing', async () => {
+    await expect(client.readResource({ uri: 'struktek://template/nope' })).rejects.toThrow();
+  });
+
   it('lists the templates it read off disk', async () => {
     const result = await client.callTool({ name: 'struktek_list_templates', arguments: {} });
     const payload = JSON.parse((result.content as { text: string }[])[0]!.text);
