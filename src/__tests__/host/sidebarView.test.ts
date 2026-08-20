@@ -41,18 +41,6 @@ const load = (source: string, name = 'fixture') =>
   loadTemplate(source, { name, parseYaml, blockTypes: new Map([['depth', ['thorough']]]) });
 
 describe('templateRow', () => {
-  it('reduces every field to name and the type a hover shows', () => {
-    const model = load(
-      'Review {{ target: file }} for {{ focus: choice[a, b] }}. Go {{ depth: depth = thorough }}',
-    );
-    // A block type reads as the type itself, never as the word "blockType".
-    expect(templateRow(model, 0).fields).toEqual([
-      { name: 'target', type: 'file' },
-      { name: 'focus', type: 'choice' },
-      { name: 'depth', type: 'depth' },
-    ]);
-  });
-
   it('carries description, tags and note through', () => {
     const model = load(
       '---\ndescription: Review a file\ntags: [review]\nnote: code you own\n---\nbody {{ a }}',
@@ -77,13 +65,18 @@ describe('templateRow', () => {
     // A broken template still lists — you cannot fix what the view hides.
     const row = templateRow(load('{{ a: nosuchtype }}'), 0);
     expect(row.errors).toBe(1);
-    expect(row.problems[0]).toContain('Unknown type');
+    expect(row.problems[0]?.message).toContain('Unknown type');
+    expect(row.problems[0]?.severity).toBe('error');
   });
 
-  it('separates errors from warnings in the count but not in the list', () => {
+  it('keeps warnings out of the error count but still reports them', () => {
+    // The hover marks the two differently, so the severity has to survive the
+    // trip rather than being flattened into a string.
     const row = templateRow(load('unmatched [ bracket {{ a }}'), 0);
     expect(row.errors).toBe(0);
-    expect(row.problems).toHaveLength(1);
+    expect(row.problems).toEqual([
+      { message: expect.stringContaining('Unmatched'), severity: 'warning' },
+    ]);
   });
 });
 

@@ -203,47 +203,35 @@ function hoverHead(
 
 function templateHover(row: TemplateRow): HTMLElement {
   const parts = hoverHead(row.name, row.description, row.tags, row.note);
-  parts.push(el('div', { class: 'stk-hover-rule' }));
-  parts.push(
-    el('div', {
-      class: 'stk-hover-fields',
-      text:
-        row.fields.length === 0
-          ? 'No fields — composes as written.'
-          : 'fields: ' + row.fields.map((field) => field.name + ':' + field.type).join(', '),
-    }),
-  );
+  // The only thing below the description is what is wrong with the template.
   for (const problem of row.problems) {
-    parts.push(el('div', { class: 'stk-hover-line stk-err', text: problem }));
+    const line = el('div', { class: 'stk-problem stk-' + problem.severity });
+    line.append(icon(problem.severity === 'error' ? 'error' : 'warning'));
+    line.append(el('span', { text: problem.message }));
+    parts.push(line);
   }
   return el('div', { class: 'stk-hover' }, parts);
 }
 
 function blockHover(row: BlockRow): HTMLElement {
-  const parts = hoverHead(row.title ?? row.instance, row.description, row.tags, row.note);
-  parts.push(el('div', { class: 'stk-hover-rule' }));
-  parts.push(el('div', { class: 'stk-hover-fields', text: 'type: ' + row.type }));
-  return el('div', { class: 'stk-hover' }, parts);
+  return el(
+    'div',
+    { class: 'stk-hover' },
+    hoverHead(row.title ?? row.instance, row.description, row.tags, row.note),
+  );
 }
 
 function blockTypeHover(group: BlockTypeRow): HTMLElement {
-  const parts = hoverHead(
-    group.type,
-    'A field type of your own — any template can ask for a ' + group.type + '.',
-    [],
-    undefined,
+  return el(
+    'div',
+    { class: 'stk-hover' },
+    hoverHead(
+      group.type,
+      'A field type of your own — any template can ask for a ' + group.type + '.',
+      [],
+      undefined,
+    ),
   );
-  parts.push(el('div', { class: 'stk-hover-rule' }));
-  parts.push(
-    el('div', {
-      class: 'stk-hover-fields',
-      text:
-        group.instances.length > 0
-          ? 'values: ' + group.instances.map((row) => row.instance).join(', ')
-          : 'No values yet — add a file under blocks/' + group.type + '/.',
-    }),
-  );
-  return el('div', { class: 'stk-hover' }, parts);
 }
 
 function withHover(row: HTMLElement, build: () => HTMLElement): HTMLElement {

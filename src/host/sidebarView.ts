@@ -20,7 +20,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { Field, TemplateModel } from '../core';
+import type { TemplateModel } from '../core';
 import type {
   BlockRow,
   BlockTypeRow,
@@ -158,10 +158,9 @@ export function templateRow(model: TemplateModel, uses: number): TemplateRow {
     ...(model.description ? { description: model.description } : {}),
     ...(model.note ? { note: model.note } : {}),
     tags: model.tags,
-    fields: model.fields.map((field) => ({ name: field.name, type: typeLabel(field) })),
     uses,
     errors: model.diagnostics.filter((d) => d.severity === 'error').length,
-    problems: model.diagnostics.map((d) => d.message),
+    problems: model.diagnostics.map((d) => ({ message: d.message, severity: d.severity })),
   };
 }
 
@@ -178,13 +177,6 @@ export function blockRow(library: Library, type: string, instance: string): Bloc
     ...(meta?.note ? { note: meta.note } : {}),
     tags: meta?.tags ?? [],
   };
-}
-
-/** A block type reads as the type, not as the word "blockType". */
-function typeLabel(field: Field): string {
-  if (field.type.kind === 'choice') return 'choice';
-  if (field.type.kind === 'blockType') return field.type.name;
-  return field.type.kind;
 }
 
 function firstLine(body: string | undefined): string | undefined {
@@ -312,13 +304,15 @@ body { overflow: hidden; }
 .stk-hover-desc { font-style: italic; opacity: .85; }
 .stk-hover-line { margin-top: 2px; }
 .stk-hover-note { margin-top: 2px; opacity: .8; }
-.stk-hover-rule {
-  height: 1px; margin: 5px 0;
-  background: var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)));
+/* A problem is the only thing a hover adds below the description, and it is
+   marked by its icon as well as its colour. */
+.stk-problem {
+  display: flex; gap: 5px; align-items: flex-start;
+  margin-top: 4px; word-break: break-word;
 }
-.stk-hover-fields {
-  font-family: var(--vscode-editor-font-family); font-size: .95em; word-break: break-word;
-}
+.stk-problem .codicon { font-size: 14px; line-height: 1.4; }
+.stk-problem.stk-error { color: var(--vscode-editorError-foreground); }
+.stk-problem.stk-warning { color: var(--vscode-editorWarning-foreground); }
 
 /* ── welcome content ────────────────────────────────────── */
 /* The workbench's own welcome-view padding, so an empty section reads like an

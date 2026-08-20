@@ -12,10 +12,10 @@
  * never has to ask a follow-up question to paint.
  */
 
-/** A field, reduced to what a hover shows: `target:file`. */
-export interface FieldSummary {
-  readonly name: string;
-  readonly type: string;
+/** A diagnostic, reduced to what a hover shows. */
+export interface Problem {
+  readonly message: string;
+  readonly severity: "error" | "warning";
 }
 
 export interface TemplateRow {
@@ -23,11 +23,17 @@ export interface TemplateRow {
   readonly description?: string;
   readonly note?: string;
   readonly tags: readonly string[];
-  readonly fields: readonly FieldSummary[];
   readonly uses: number;
   readonly errors: number;
-  /** Shown under the hover's field list, so a broken template explains itself. */
-  readonly problems: readonly string[];
+  /**
+   * What is wrong with the template, if anything.
+   *
+   * The only thing a hover says beyond describing the template. Its fields are
+   * the composer's business — the hover is for deciding whether this is the
+   * template you want, and a field list answers a question you have not asked
+   * yet.
+   */
+  readonly problems: readonly Problem[];
 }
 
 export interface BlockRow {
