@@ -284,7 +284,9 @@ body { overflow: hidden; }
 .stk-act:hover { background: var(--vscode-toolbar-hoverBackground); }
 .stk-act .codicon { font-size: 16px; }
 
-/* Colour marks ordered state only, and never alone — the count carries text. */
+/* A template with errors keeps its own icon and is coloured, the way the
+   explorer decorates a file with problems. Colour never carries it alone: the
+   row says "2 errors" beside it, and the hover lists them. */
 .stk-err { color: var(--vscode-editorError-foreground); }
 
 /* ── hover ──────────────────────────────────────────────── */

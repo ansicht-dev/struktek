@@ -273,7 +273,11 @@ function rowShell(
     icon(opts.icon, 'stk-icon' + (opts.danger ? ' stk-err' : '')),
     el('span', { class: 'stk-row-name', text: opts.label }),
   );
-  if (opts.note) row.append(el('span', { class: 'stk-row-note', text: opts.note }));
+  if (opts.note) {
+    row.append(
+      el('span', { class: 'stk-row-note' + (opts.danger ? ' stk-err' : ''), text: opts.note }),
+    );
+  }
   row.addEventListener('click', () => {
     state.active = id;
     activate();
@@ -293,7 +297,7 @@ function templateRowNode(row: TemplateRow): HTMLElement {
   const node = rowShell(
     'template:' + row.name,
     {
-      icon: row.errors > 0 ? 'warning' : 'symbol-snippet',
+      icon: 'symbol-snippet',
       label: row.name,
       ...(note ? { note } : {}),
       danger: row.errors > 0,
@@ -317,7 +321,7 @@ function blockRowNode(row: BlockRow): HTMLElement {
   const node = rowShell(
     'block:' + row.type + '/' + row.instance,
     {
-      icon: 'symbol-text',
+      icon: 'symbol-enum-member',
       label: row.instance,
       ...(row.title ? { note: row.title } : {}),
       indent: true,
