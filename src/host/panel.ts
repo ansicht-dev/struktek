@@ -180,6 +180,7 @@ export class StruktekPanel {
 
     const detail: TemplateDetail = {
       name: entry.model.name,
+      scope: entry.scope,
       ...(entry.model.description ? { description: entry.model.description } : {}),
       tags: entry.model.tags,
       fields: entry.model.fields,

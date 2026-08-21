@@ -81,12 +81,15 @@ async function pickTemplate(library: Library, stats: Stats): Promise<TemplateEnt
   const ordered = stats.order(entries.map((e) => e.model.name));
   const items = ordered.map((name) => {
     const entry = library.get(name)!;
-    const uses = stats.uses(name);
     const errors = entry.model.diagnostics.filter((d) => d.severity === 'error').length;
     return {
       label: name,
+      // No use count: the ordering above already IS the use count, and
+      // printing it as well says the same thing twice.
       description: [
-        uses > 0 ? String(uses) + '×' : undefined,
+        // Only global is marked. The workspace library is the unremarkable
+        // case, and a badge on every row would say nothing.
+        entry.scope === 'global' ? '$(globe) global' : undefined,
         errors > 0 ? '$(error) ' + String(errors) : undefined,
       ]
         .filter(Boolean)

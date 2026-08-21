@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import { loadBlocks, loadTemplate, mapBlockReader } from '../../core';
+import { loadBlocks, loadTemplate, mapBlockReader, type LibraryScope } from '../../core';
 import type { Library } from '../../host/library';
 import { blockRow, templateRow } from '../../host/sidebarView';
 
@@ -32,9 +32,15 @@ const BLOCK_SOURCES = {
   },
 };
 
-async function library(): Promise<Library> {
-  const blocks = await loadBlocks(mapBlockReader(BLOCK_SOURCES), { parseYaml });
-  return { blocks } as unknown as Library;
+async function library(scope: LibraryScope = 'workspace'): Promise<Library> {
+  const blocks = await loadBlocks(mapBlockReader(BLOCK_SOURCES), { parseYaml, scope });
+  return {
+    blocks,
+    scopeOfBlock: (type: string, instance: string) => blocks.scopes.get(type)?.get(instance),
+    // Times come from `stat`, which a map-backed reader has none of. Zero is
+    // what the real loader records for a file the filesystem would not date.
+    createdAtBlock: () => 0,
+  } as unknown as Library;
 }
 
 const load = (source: string, name = 'fixture') =>
@@ -45,7 +51,7 @@ describe('templateRow', () => {
     const model = load(
       '---\ndescription: Review a file\ntags: [review]\nnote: code you own\n---\nbody {{ a }}',
     );
-    const row = templateRow(model, 3);
+    const row = templateRow(model, 3, 'workspace');
     expect(row).toMatchObject({
       description: 'Review a file',
       tags: ['review'],
@@ -55,7 +61,7 @@ describe('templateRow', () => {
   });
 
   it('omits absent prose rather than sending empty strings', () => {
-    const row = templateRow(load('body {{ a }}'), 0);
+    const row = templateRow(load('body {{ a }}'), 0, 'workspace');
     expect(row.description).toBeUndefined();
     expect(row.note).toBeUndefined();
     expect(row.tags).toEqual([]);
@@ -63,7 +69,7 @@ describe('templateRow', () => {
 
   it('counts errors and passes the messages on', () => {
     // A broken template still lists — you cannot fix what the view hides.
-    const row = templateRow(load('{{ a: nosuchtype }}'), 0);
+    const row = templateRow(load('{{ a: nosuchtype }}'), 0, 'workspace');
     expect(row.errors).toBe(1);
     expect(row.problems[0]?.message).toContain('Unknown type');
     expect(row.problems[0]?.severity).toBe('error');
@@ -72,7 +78,7 @@ describe('templateRow', () => {
   it('keeps warnings out of the error count but still reports them', () => {
     // The hover marks the two differently, so the severity has to survive the
     // trip rather than being flattened into a string.
-    const row = templateRow(load('unmatched [ bracket {{ a }}'), 0);
+    const row = templateRow(load('unmatched [ bracket {{ a }}'), 0, 'workspace');
     expect(row.errors).toBe(0);
     expect(row.problems).toEqual([
       { message: expect.stringContaining('Unmatched'), severity: 'warning' },
@@ -89,6 +95,8 @@ describe('blockRow', () => {
       description: 'Follow the call sites',
       note: 'Costs more tokens',
       tags: ['careful'],
+      created: 0,
+      scope: 'workspace',
     });
   });
 
@@ -98,6 +106,8 @@ describe('blockRow', () => {
       instance: 'quick',
       description: 'shallow — flag anything obvious and stop.',
       tags: [],
+      created: 0,
+      scope: 'workspace',
     });
   });
 
@@ -113,6 +123,14 @@ describe('blockRow', () => {
 
   it('survives a block that is not there', async () => {
     const row = blockRow(await library(), 'depth', 'missing');
-    expect(row).toEqual({ type: 'depth', instance: 'missing', tags: [] });
+    // No instance, so no scope to report — the row falls back to the library
+    // it was asked about rather than claiming to be global.
+    expect(row).toEqual({
+      type: 'depth',
+      instance: 'missing',
+      tags: [],
+      created: 0,
+      scope: 'workspace',
+    });
   });
 });

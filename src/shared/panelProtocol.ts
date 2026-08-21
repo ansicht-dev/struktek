@@ -14,7 +14,7 @@
  * was one surface too many, and an editor tab is better spent on the composer.
  */
 
-import type { Field, Node } from '../core';
+import type { Field, LibraryScope, Node } from '../core';
 
 /** Block type name to instance name to body. `Map` does not survive postMessage. */
 export type BlockBodies = Record<string, Record<string, string>>;
@@ -50,6 +50,14 @@ export interface HistoryFeedRow extends HistoryRow {
 /** Everything the compose screen needs, in one message. */
 export interface TemplateDetail {
   readonly name: string;
+  /**
+   * Which library this template came from.
+   *
+   * In the header rather than only in the sidebar, because the composer is
+   * where a template is most likely to be edited — and "this change lands in
+   * every workspace" is worth knowing before you make it, not after.
+   */
+  readonly scope: LibraryScope;
   readonly description?: string;
   readonly tags: readonly string[];
   readonly fields: readonly Field[];

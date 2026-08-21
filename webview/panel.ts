@@ -490,17 +490,31 @@ function composerHeader(detail: TemplateDetail): HTMLElement {
   );
 
   const bar = el('div', { class: 'stk-bar' }, [name]);
+  // Before the tags, because it is not one: it says which library the file is
+  // in, which changes what editing it affects.
+  if (detail.scope === 'global') {
+    const badge = el(
+      'span',
+      {
+        class: 'stk-chip stk-static stk-scope',
+        title: 'From your global library — editing this changes it in every workspace.',
+      },
+      [icon('globe'), el('span', { text: 'global' })],
+    );
+    bar.append(badge);
+  }
   for (const tag of detail.tags) bar.append(el('span', { class: 'stk-chip stk-static', text: tag }));
   bar.append(el('div', { class: 'stk-spacer' }));
 
-  // A pointer at the history screen, not a copy of it.
+  // A pointer at the history screen, not a copy of it \u2014 and not a scoreboard
+  // either. How many times you have composed this is a sort key in the
+  // sidebar, not a number worth carrying in the header; WHEN you last did is
+  // the part that tells you whether you are repeating yourself.
   if (detail.uses > 0) {
-    const summary =
-      String(detail.uses) + '\u00d7' + (detail.lastUsed ? ' \u00b7 ' + ago(detail.lastUsed) : '');
     bar.append(
       on(
         el('button', { class: 'stk-link', title: 'History for this template' }, [
-          el('span', { text: summary }),
+          el('span', { text: detail.lastUsed ? ago(detail.lastUsed) : 'History' }),
           icon('history'),
         ]),
         'click',

@@ -20,7 +20,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { TemplateModel } from '../core';
+import type { LibraryScope, ShadowedBlock, TemplateModel } from '../core';
 import type {
   BlockRow,
   BlockTypeRow,
@@ -82,10 +82,10 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand('struktek.showTemplate', message.name);
         return;
       case 'openTemplate':
-        await vscode.commands.executeCommand('struktek.openTemplate', message.name);
+        await vscode.commands.executeCommand('struktek.openTemplate', message.name, message.scope);
         return;
       case 'deleteTemplate':
-        await vscode.commands.executeCommand('struktek.deleteTemplate', message.name);
+        await vscode.commands.executeCommand('struktek.deleteTemplate', message.name, message.scope);
         return;
       case 'newTemplate':
         await vscode.commands.executeCommand('struktek.newTemplate');
@@ -94,17 +94,33 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand('struktek.newBlock', message.blockType);
         return;
       case 'openBlock':
-        await vscode.commands.executeCommand('struktek.openBlock', message.blockType, message.instance);
+        await vscode.commands.executeCommand(
+          'struktek.openBlock',
+          message.blockType,
+          message.instance,
+          message.scope,
+        );
         return;
       case 'deleteBlock':
         await vscode.commands.executeCommand(
           'struktek.deleteBlock',
           message.blockType,
           message.instance,
+          message.scope,
         );
         return;
       case 'deleteBlockType':
-        await vscode.commands.executeCommand('struktek.deleteBlockType', message.blockType);
+        await vscode.commands.executeCommand(
+          'struktek.deleteBlockType',
+          message.blockType,
+          message.scope,
+        );
+        return;
+      case 'setScope':
+        await vscode.commands.executeCommand(
+          message.to === 'global' ? 'struktek.makeGlobal' : 'struktek.makeWorkspace',
+          message.target,
+        );
         return;
       case 'seedLibrary':
         await vscode.commands.executeCommand('struktek.seedLibrary');
@@ -116,25 +132,54 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
     const library = this.getLibrary();
     const stats = this.getStats();
     if (!library || !stats) {
-      return { type: 'library', templates: [], blockTypes: [], tags: [], hasWorkspace: false };
+      return {
+        type: 'library',
+        templates: [],
+        blockTypes: [],
+        tags: [],
+        hasWorkspace: false,
+        hasGlobal: false,
+      };
     }
 
-    // Most-used first, mirroring the picker and the panel: the list should
-    // reflect what you actually reach for.
-    const templates = stats
-      .order(library.names())
-      .map((name) => library.get(name))
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
-      .map((entry) => templateRow(entry.model, stats.uses(entry.model.name)));
+    // Unordered on purpose. The frame sorts, because the ordering is a live
+    // choice the user makes in the search row and re-sorting must not cost a
+    // round-trip. What crosses is the two keys it sorts by, neither of which
+    // is ever drawn: how often this has been composed here, and how old it is.
+    const templates = library
+      .list()
+      .map((entry) =>
+        templateRow(entry.model, stats.uses(entry.model.name), entry.scope, entry.created),
+      );
+
+    // Overridden templates go last rather than beside their winner: they are
+    // not things to compose, and interleaving them would double the length of
+    // a list whose whole job is being scannable.
+    for (const entry of library.shadowedTemplates()) {
+      templates.push(
+        templateRow(entry.model, stats.uses(entry.model.name), entry.scope, entry.created, true),
+      );
+    }
 
     const blockTypes = [...library.blocks.names.keys()]
       .sort((a, b) => a.localeCompare(b))
-      .map((type): BlockTypeRow => ({
-        type,
-        instances: (library.blocks.names.get(type) ?? []).map((instance) =>
+      .map((type): BlockTypeRow => {
+        const instances = (library.blocks.names.get(type) ?? []).map((instance) =>
           blockRow(library, type, instance),
-        ),
-      }));
+        );
+        for (const block of library.shadowedBlocks) {
+          if (block.type !== type) continue;
+          instances.push(shadowedBlockRow(block));
+        }
+        return {
+          type,
+          instances,
+          // Global only when nothing in it is local — see the protocol note.
+          // A shadowed global value does not make the type global: what other
+          // workspaces see is what counts, and the winner here is local.
+          scope: instances.every((row) => row.scope === 'global') ? 'global' : 'workspace',
+        };
+      });
 
     const tags = new Set<string>();
     for (const row of templates) for (const tag of row.tags) tags.add(tag);
@@ -147,12 +192,19 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
       templates,
       blockTypes,
       tags: [...tags].sort((a, b) => a.localeCompare(b)),
-      hasWorkspace: true,
+      hasWorkspace: library.roots.workspace !== undefined,
+      hasGlobal: library.roots.global !== undefined,
     };
   }
 }
 
-export function templateRow(model: TemplateModel, uses: number): TemplateRow {
+export function templateRow(
+  model: TemplateModel,
+  uses: number,
+  scope: LibraryScope,
+  created = 0,
+  shadowed = false,
+): TemplateRow {
   return {
     name: model.name,
     ...(model.description ? { description: model.description } : {}),
@@ -161,6 +213,9 @@ export function templateRow(model: TemplateModel, uses: number): TemplateRow {
     uses,
     errors: model.diagnostics.filter((d) => d.severity === 'error').length,
     problems: model.diagnostics.map((d) => ({ message: d.message, severity: d.severity })),
+    created,
+    scope,
+    ...(shadowed ? { shadowed: true } : {}),
   };
 }
 
@@ -176,6 +231,32 @@ export function blockRow(library: Library, type: string, instance: string): Bloc
     ...(description ? { description } : {}),
     ...(meta?.note ? { note: meta.note } : {}),
     tags: meta?.tags ?? [],
+    created: library.createdAtBlock(type, instance),
+    scope: library.scopeOfBlock(type, instance) ?? 'workspace',
+  };
+}
+
+/**
+ * A row for a value that is on disk but not what renders.
+ *
+ * Built from the shadowed copy's own body and header rather than from the
+ * library, which by then holds only the winner — describing the hidden value
+ * with the displacing value's text would be worse than showing nothing.
+ */
+export function shadowedBlockRow(block: ShadowedBlock): BlockRow {
+  const description = block.meta?.description ?? firstLine(block.body);
+  return {
+    type: block.type,
+    instance: block.instance,
+    ...(block.meta?.title && block.meta.title !== block.instance ? { title: block.meta.title } : {}),
+    ...(description ? { description } : {}),
+    ...(block.meta?.note ? { note: block.meta.note } : {}),
+    tags: block.meta?.tags ?? [],
+    // The hidden copy's own file, not the winner's — the same reason its body
+    // and header come from `block` rather than from the library.
+    created: 0,
+    scope: block.scope,
+    shadowed: true,
   };
 }
 
@@ -225,7 +306,104 @@ body { overflow: hidden; }
   color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
   border-color: var(--vscode-inputOption-activeBorder, var(--vscode-contrastBorder, transparent));
 }
-.stk-tagrow { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 6px; flex: 0 0 auto; }
+
+/* ── menus ──────────────────────────────────────────────────────────── */
+/*
+ * Drawn to match the workbench's own context menu, because a webview cannot
+ * open the real one. Menu tokens throughout — they are a separate family from
+ * the list and editor colours, and using list tokens here would look close in
+ * one theme and wrong in the next.
+ *
+ * Fixed positioning, so it escapes the pane's clipped overflow and can hang
+ * below a button near the bottom edge.
+ */
+/*
+ * Metrics lifted from the workbench's own menu stylesheet rather than
+ * approximated, because approximating is exactly what makes a drawn menu feel
+ * drawn. VS Code injects these at runtime from its menu widget; the numbers
+ * below are that rule set, read out of the shipped build:
+ *
+ *   .monaco-menu                     font-size 13px, min-width 160px,
+ *                                    1px menu.border, cornerRadius-large
+ *   .monaco-menu .action-menu-item   height 24px, margin 0 4px,
+ *                                    cornerRadius-medium
+ *   .monaco-menu .action-label       padding 0 1em, font-size 12px,
+ *                                    line-height 1
+ *   .menu-item-check                 absolute, width 1em, full height
+ *   .monaco-menu-container           shadow, fade-in 0.083s linear
+ *
+ * The load-bearing one is the ITEM: 24px tall with a 4px side margin and a
+ * rounded corner, so the highlight is an inset pill rather than a full-bleed
+ * band. A full-width highlight is the single thing that reads most wrong.
+ */
+.stk-menu {
+  position: fixed; z-index: 20;
+  min-width: 160px; max-width: calc(100vw - 8px);
+  max-height: 60vh; overflow-y: auto;
+  padding: 4px 0;
+  font-size: 13px;
+  border-radius: var(--vscode-cornerRadius-large, 5px);
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  /*
+   * The outline. VS Code writes this as a bare menu.border, which many themes
+   * leave unset - it relies on the shadow to draw the edge instead. Both were
+   * resolving to nothing here, which is why the menu had no edge at all, so
+   * the fallback walks on to borders every theme does define rather than
+   * giving up at transparent.
+   */
+  border: 1px solid var(--vscode-menu-border,
+    var(--vscode-editorWidget-border,
+      var(--vscode-widget-border,
+        var(--vscode-contrastBorder, transparent))));
+  box-shadow: var(--vscode-shadow-lg, 0 2px 8px var(--vscode-widget-shadow, transparent));
+  /* The workbench's own easing and duration, so a menu opening here and a menu
+     opening in the editor do not arrive at different speeds. */
+  animation: stk-menu-in .083s linear;
+}
+@keyframes stk-menu-in { from { opacity: 0; } to { opacity: 1; } }
+
+.stk-menu-item {
+  position: relative;
+  display: flex; align-items: center;
+  height: 24px; margin: 0 4px; padding: 0;
+  width: calc(100% - 8px);
+  border: none; border-radius: var(--vscode-cornerRadius-medium, 4px);
+  background: transparent; color: inherit;
+  text-align: left; cursor: pointer;
+}
+/* Hover and keyboard focus are the SAME state in a menu - there is no separate
+   selected row, and a menu with two highlights would read as two cursors. */
+.stk-menu-item:hover,
+.stk-menu-item:focus,
+.stk-menu-item:focus-visible {
+  outline: none;
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
+}
+/* Absolute, sitting inside the label's own left padding rather than taking a
+   column of its own - the workbench's arrangement, and the reason its labels
+   sit where they do whether ticked or not. */
+.stk-menu-check {
+  position: absolute; left: 0; width: 1em; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.stk-menu-label {
+  flex: 1 1 auto; padding: 0 1em; font-size: 12px; line-height: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Dimmed like the workbench's own submenu chevron: it is an affordance, not a
+   thing to read. */
+.stk-menu-more { flex: 0 0 auto; margin-left: auto; padding-right: 6px; opacity: .7; }
+/* Greyed but still readable, and never highlighted - a section with nothing in
+   it says so rather than vanishing, which would leave you wondering whether
+   you had missed it. */
+.stk-menu-disabled { color: var(--vscode-disabledForeground, inherit); opacity: .6; cursor: default; }
+.stk-menu-disabled:hover, .stk-menu-disabled:focus { background: transparent; color: var(--vscode-disabledForeground, inherit); }
+.stk-menu-sep {
+  height: 0; margin: 4px 0;
+  border-bottom: 1px solid var(--vscode-menu-separatorBackground, var(--vscode-disabledForeground));
+}
 
 /* ── pane headers ───────────────────────────────────────── */
 .stk-body { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
@@ -283,6 +461,88 @@ body { overflow: hidden; }
 }
 .stk-act:hover { background: var(--vscode-toolbar-hoverBackground); }
 .stk-act .codicon { font-size: 16px; }
+
+/* ── scope ──────────────────────────────────────────────────────────── */
+/*
+ * The global badge, composed onto the row's own icon.
+ *
+ * A corner overlay rather than a second icon beside the name: the row should
+ * read as "a template" first and "a global one" second, and a standalone glyph
+ * after the name competed with the name for the eye. This is the arrangement
+ * the Explorer uses for a decorated file — base glyph, small mark in a corner.
+ *
+ * The wrapper only appears on a badged row, and adds no width of its own, so
+ * badged and unbadged rows line up to the pixel.
+ */
+/*
+ * The badge is a declared FRACTION of the icon it sits on, not a hand-picked
+ * pixel size. Every codicon in a row renders at 16px — codicon.css sets that
+ * with a font shorthand — so the one number that matters is the ratio, and
+ * it is written down rather than implied by a magic 8.
+ *
+ * Half. A badge has to leave the icon it is badging legible: the row must
+ * still read as "a template" first and "a global one" second, and anything
+ * approaching the base size reads as a REPLACED icon instead of a badged one.
+ */
+.stk-icon-stack {
+  --stk-icon: 16px;
+  --stk-badge-scale: .5;
+  --stk-badge: calc(var(--stk-icon) * var(--stk-badge-scale));
+  position: relative; display: inline-flex; align-items: center;
+  height: var(--stk-icon); flex: 0 0 auto;
+}
+/*
+ * Specificity here is load-bearing, not stylistic.
+ *
+ * codicon.css sizes glyphs through a selector carrying a class AND an
+ * attribute test, which is
+ * (0,2,0). A single-class rule loses to it SILENTLY: the declaration is
+ * ignored, the badge renders at the full 16px, and the composition reads as an
+ * icon that was replaced rather than decorated. Three classes clear it
+ * outright, so this cannot regress on stylesheet order.
+ */
+.stk-icon-stack .codicon.stk-overlay {
+  /* Offset from the corner by less than its own radius, so the disc hangs off
+     the bottom-left and clips about a fifth of the base rather than covering
+     its middle. Not a full half-diameter: that would push it into the twistie
+     column, where a block type's chevron already is. */
+  position: absolute; left: -3px; bottom: -3px;
+  font-size: var(--stk-badge); line-height: var(--stk-badge);
+  padding: 1px; border-radius: 50%;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+/*
+ * The badge sits ON the base glyph, so it needs its own ground to read against
+ * — and that ground has to be whatever the row is currently painted with, or
+ * the badge shows as a differently-coloured dot exactly when you hover it.
+ *
+ * Hover and selection tokens are often translucent, so they are layered OVER
+ * the sidebar background rather than replacing it. That is what the row itself
+ * does; a gradient of one colour is the only way to stack two backgrounds on
+ * one element.
+ */
+.stk-overlay { background-color: var(--vscode-sideBar-background); }
+.stk-row:hover .stk-overlay {
+  background-image: linear-gradient(
+    var(--vscode-list-hoverBackground),
+    var(--vscode-list-hoverBackground)
+  );
+}
+.stk-row.stk-active .stk-overlay {
+  background-image: linear-gradient(
+    var(--vscode-list-inactiveSelectionBackground),
+    var(--vscode-list-inactiveSelectionBackground)
+  );
+}
+
+/* A row that is on disk but not what renders. Dimmed rather than hidden, and
+   never dimmed so far that its name stops being readable — it is still a file
+   you may want to open, promote or delete. Opacity alone does not carry it:
+   the hover says "Overridden" in words. */
+.stk-shadowed { opacity: .55; }
+.stk-shadowed .stk-row-name { text-decoration: line-through; text-decoration-thickness: 1px; }
+.stk-shadowed:hover { opacity: 1; }
+.stk-scope-note, .stk-shadowed-note { opacity: .8; }
 
 /* A template with errors keeps its own icon and is coloured, the way the
    explorer decorates a file with problems. Colour never carries it alone: the

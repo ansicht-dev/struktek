@@ -183,5 +183,9 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
 }
 .stk-chip[aria-pressed="true"] { border-color: var(--vscode-focusBorder); }
 .stk-chip.stk-static { cursor: default; }
+/* The global badge: a chip with its icon, reading as provenance rather than as
+   a tag you could click off. The icon is decoration — the word carries it. */
+.stk-chip.stk-scope { display: inline-flex; align-items: center; gap: 4px; }
+.stk-chip.stk-scope .codicon { font-size: 12px; }
 .stk-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 `;
