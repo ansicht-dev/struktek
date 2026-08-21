@@ -101,6 +101,76 @@ cannot do.
   frontmatter describe a block in the sidebar. Everything below the fence is
   what actually lands in the prompt — the header never renders.
 
+## Two libraries
+
+Templates live in `.struktek/` in your workspace. They can also live in
+`~/.struktek/`, which is visible from **every** workspace — the same layout,
+one level up:
+
+```
+~/.struktek/                 <- global, everywhere
+  templates/commit-message.md
+  blocks/depth/forensic.md
+
+my-project/.struktek/        <- this project only
+  templates/code-review.md
+  blocks/depth/forensic.md   <- wins; the global one is shown as overridden
+```
+
+The two are merged into one library. **The workspace wins a name collision**,
+the way `git config` and VS Code settings resolve — so a project can override a
+global template without renaming anything, and the copy it displaced is still
+listed, marked as overridden, so you can see why.
+
+Block *types* union rather than collide: a `blocks/depth/` folder in your global
+library makes `{{ how: depth }}` a valid field in every project you open.
+
+**Moving between them is a file move.** Any row in the sidebar has a globe
+(make global) or a folder (make workspace-only), and the same pair is in the
+palette as `Struktek: Make Global` / `Struktek: Make Workspace-Only`. A block
+type moves as a unit — all of its values.
+
+Struktek asks first when the move is not just a move: when the destination name
+is taken, when demoting something you might rely on elsewhere, and — the one
+worth the dialog — when promoting a template whose block types exist only in
+this workspace. That last one reads fine here and reports an unknown type in
+every *other* project, so it offers to bring the blocks along.
+
+Templates in the global library work with no folder open at all, and the offline
+MCP bridge reads both roots, so a global template is there in a bare terminal
+too. Use counts and history stay per-workspace: how often you reach for a
+template *here* is the useful question.
+
+Set `struktek.globalLibrary.path` to keep it somewhere else, or
+`struktek.globalLibrary.enabled` to `false` to use the workspace library alone.
+
+## Finding things
+
+The search box narrows templates and blocks as you type, matching names,
+descriptions, notes and tags. Two buttons sit beside it, each opening a menu
+with submenus — menus rather than panels that unfold, so choosing never moves
+the list underneath you.
+
+**Filter** holds one section per dimension. Today that is Tags; tick as many as
+you like and the funnel fills in while a filter is on.
+
+**Sort** holds one submenu per field, each with both directions:
+
+| | |
+|---|---|
+| Relevance | Most used · Least used |
+| Name | Alphabetical · Reverse alphabetical |
+| Date | Newest · Oldest |
+
+Most used is the default and counts prompts composed from a template *in this
+workspace*. You will not find that number anywhere in the UI, and that is on
+purpose: a count beside every row is something you read past on each pass,
+while the order it produces needs no reading at all. Blocks carry no such
+count, so they stay alphabetical whichever sort is chosen.
+
+Overridden rows sort last under every option — a struck-through row should
+never sit above one you can actually compose.
+
 ## The panel
 
 `Struktek: Open Panel` has two screens.
@@ -148,6 +218,9 @@ points.
 | `Struktek: New Block` | add a value to a block type, or start a new type |
 | `Struktek: Open Panel` | the composer, and the history of every prompt you have produced |
 | `Struktek: Open Template Library` | browse and edit what you have |
+| `Struktek: Make Global` | move a template or block into `~/.struktek`, for every workspace |
+| `Struktek: Make Workspace-Only` | move it back into this project |
+| `Struktek: Reveal Global Library` | open `~/.struktek` in your file manager |
 | `Struktek: Configure MCP for Agent` | wire your templates into Claude Code or Codex |
 
 Composing ends with a choice of **Send to Chat** (prefills the chat box without
@@ -176,7 +249,13 @@ no absolute path — so it is static, committable, and survives restarts.
 
 When VS Code is running the bridge proxies to it, keeping one writer for usage
 stats and last-used values. When it is not, templates are read straight off
-disk, so your slash commands still work in a bare terminal.
+disk — both libraries, merged the same way — so your slash commands still work
+in a bare terminal.
+
+`struktek_save_template` and `struktek_save_block` take a `scope`, offered only
+when there are two libraries to choose between. It defaults to the workspace:
+an agent should not make something global for every project you open unless you
+asked for it.
 
 ## Development
 
@@ -192,7 +271,9 @@ npm run package:bridge # build the publishable npm bridge
 
 | Setting | Default | |
 |---|---|---|
-| `struktek.libraryPath` | `.struktek` | where templates and blocks live |
+| `struktek.libraryPath` | `.struktek` | where this workspace's templates and blocks live |
+| `struktek.globalLibrary.enabled` | `true` | also load a library visible from every workspace |
+| `struktek.globalLibrary.path` | `~/.struktek` | where that library lives |
 | `struktek.mcp.enabled` | `true` | run the MCP server so agents can reach your templates |
 | `struktek.logLevel` | `info` | verbosity of the Struktek output channel |
 
