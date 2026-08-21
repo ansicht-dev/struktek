@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in Struktek is broken, or does not do what it says.
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to write this up.
+
+        If you opened this from inside the editor, the version, editor and
+        platform below are already filled in — leave them as they are.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, and what did Struktek do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >
+        The shortest path you know of. A template that triggers it is worth more
+        than a paragraph describing one — paste it in if you can share it.
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: version
+    attributes:
+      label: Struktek version
+    validations:
+      required: true
+  - type: input
+    id: editor
+    attributes:
+      label: Editor
+      description: VS Code, VSCodium, Cursor — and its version.
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: >
+        Anything Struktek logged, from View → Output → Struktek. Pasted here it
+        is formatted as a log automatically, so no backticks are needed.
+      render: shell

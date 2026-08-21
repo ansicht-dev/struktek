@@ -152,6 +152,11 @@
       {
         "command": "struktek.openGlobalLibrary",
         "title": "Struktek: Reveal Global Library"
+      },
+      {
+        "command": "struktek.reportIssue",
+        "title": "Struktek: Report an Issue",
+        "icon": "$(issues)"
       }
     ],
     "menus": {
@@ -175,6 +180,11 @@
           "command": "struktek.openGlobalLibrary",
           "when": "view == struktek.sidebar",
           "group": "1_struktek@2"
+        },
+        {
+          "command": "struktek.reportIssue",
+          "when": "view == struktek.sidebar",
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [

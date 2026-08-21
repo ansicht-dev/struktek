@@ -29,6 +29,7 @@ import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
 import { McpStatus, MCP_STATUS_COMMAND } from './mcpStatus';
 import { StruktekPanel } from './panel';
+import { reportIssue } from './report';
 import { SidebarViewProvider, SIDEBAR_VIEW_ID } from './sidebarView';
 import { newBlockBody, newTemplateBody, seedLibrary } from './seed';
 import { registerTemplateEditor } from './templateEditor';
@@ -159,6 +160,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
     vscode.commands.registerCommand('struktek.deleteBlockType', (node?: unknown, scope?: unknown) =>
       withSession((s) => deleteBlockType(s.library, node, scopeOf(scope))),
+    ),
+    // No session: you should be able to report that struktek did not start.
+    vscode.commands.registerCommand('struktek.reportIssue', () =>
+      reportIssue(context.extension.packageJSON, context.extension.packageJSON.version),
     ),
     vscode.commands.registerCommand('struktek.openLibrary', () =>
       withSession((s) => openLibrary(s.library)),
