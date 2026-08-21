@@ -170,19 +170,31 @@ const STYLES = `
 }
 .stk-run-top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
 .stk-run-name { font-weight: 600; }
+/*
+ * The card is the click target, so the card carries the affordance: the
+ * cursor, and a border that picks up the accent as you come over it.
+ *
+ * The background deliberately does NOT change. A feed is a column of cards on
+ * a page, and lighting one of them up as the pointer crosses is a lot of
+ * movement for "you are over this"; the border says it without the page
+ * flickering under the mouse. The excerpt inside is now plain text and takes
+ * no highlight of its own - it was a button, and a pressable-looking panel
+ * inside a pressable card was one surface too many.
+ */
+.stk-run-card { cursor: pointer; }
+.stk-run-card:hover { border-color: var(--vscode-focusBorder); }
+.stk-run-card:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px;
+}
 .stk-excerpt {
-  text-align: left; width: 100%; margin: 0;
-  padding: 10px 12px; border-radius: 4px; cursor: pointer;
+  margin: 0;
+  padding: 10px 12px; border-radius: 4px;
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
   border: 1px solid var(--vscode-contrastBorder, transparent);
   color: var(--vscode-foreground);
   font-family: var(--vscode-editor-font-family); font-size: .88em; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
 }
-.stk-excerpt:hover { border-color: var(--vscode-focusBorder); }
-/* Collapsed rows stay one line so the feed scans; expanded ones get a cap
-   rather than an unbounded card that pushes everything else off screen. */
-.stk-excerpt-open { max-height: 340px; overflow: auto; }
 .stk-ref { display: flex; gap: 5px; flex-wrap: wrap; }
 /* Not wrapped: the row is two actions, a gap, and the one destructive action
    pushed to the far edge — where it cannot be hit on the way to Copy. */
@@ -196,6 +208,71 @@ const STYLES = `
 .stk-when { font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground); font-size: .86em; }
 
 
+/* ── one run, in full ───────────────────────────────────── */
+/*
+ * A real <dialog>, so the browser owns Escape, the focus trap and the inert
+ * page behind it. What is claimed here is only its LOOK, which the browser
+ * draws for a white page: a black border, a white background, and 1em of
+ * padding no theme asked for.
+ *
+ * "display" is set on "[open]" and not on the element, because a closed dialog
+ * is hidden by a UA rule that an author "display" would beat - stated flat, it
+ * would leave every dialog on screen from the moment it was built.
+ */
+.stk-dialog {
+  padding: 0; margin: auto;
+  width: min(920px, calc(100vw - 64px));
+  max-width: calc(100vw - 32px); max-height: calc(100vh - 80px);
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  box-shadow: 0 8px 30px var(--vscode-widget-shadow, transparent);
+}
+.stk-dialog[open] { display: flex; flex-direction: column; }
+/* The scrim is the editor's own background, thinned. Themes ship no token for
+   one, and mixing the colour the page is already made of is the version that
+   cannot clash with a theme. The flat declaration first is the fallback for an
+   engine without color-mix, where an opaque sheet is still a correct modal. */
+.stk-dialog::backdrop { background: var(--vscode-editor-background); }
+.stk-dialog::backdrop { background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent); }
+
+.stk-dialog-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 13px 14px 11px;
+}
+.stk-dialog-title { font-size: 1.15em; font-weight: 600; margin: 0; }
+.stk-dialog .stk-ref { padding: 0 14px 12px; }
+/* Field values as a two-column list: the names are short and want to line up,
+   the values are the user's own text and take whatever room is left. */
+.stk-dialog-values {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px; margin: 0; padding: 0 14px 13px;
+  font-size: .88em;
+}
+.stk-dialog-values dt { color: var(--vscode-descriptionForeground); }
+.stk-dialog-values dd {
+  margin: 0; font-family: var(--vscode-editor-font-family);
+  overflow-wrap: anywhere;
+}
+/* The point of the dialog: the whole prompt, selectable, scrolling on its own
+   so the header and the actions stay put however long it is. */
+.stk-dialog-prompt {
+  flex: 1 1 auto; overflow: auto; margin: 0;
+  /* min-height: 0, not a floor - a flex child needs it before it will scroll
+     at all, and a floor would leave dead space under a one-line prompt. */
+  padding: 14px; min-height: 0;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size, .92em);
+  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  user-select: text;
+}
+.stk-dialog-actions { display: flex; align-items: center; gap: 8px; padding: 11px 14px; }
+.stk-dialog-actions .stk-icon-button:hover .codicon-trash { color: var(--vscode-editorError-foreground); }
 
 .stk-blank {
   text-align: center; padding: 54px 20px;

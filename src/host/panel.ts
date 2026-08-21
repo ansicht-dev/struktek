@@ -271,6 +271,17 @@ export class StruktekPanel {
         await vscode.commands.executeCommand('struktek.newTemplate');
         return;
 
+      case 'openBlockFile':
+        // Through the command the sidebar uses, rather than resolving the file
+        // here: two ways to open the same block would eventually disagree
+        // about which copy wins.
+        await vscode.commands.executeCommand(
+          'struktek.openBlock',
+          message.blockType,
+          message.instance,
+        );
+        return;
+
       case 'editTemplate': {
         const entry = deps.library.get(message.name);
         if (!entry) return;

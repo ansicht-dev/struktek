@@ -60,8 +60,6 @@ interface State {
   feedActiveTemplates: Set<string>;
   feedActiveTags: Set<string>;
   feedSort: SortOrder;
-  /** Which run's full prompt is open, keyed by entry id. */
-  feedOpen: Set<string>;
   /** The seed already applied, so a repaint does not re-apply it. */
   seedId?: string;
 }
@@ -126,7 +124,6 @@ const state: State = {
   feedActiveTemplates: new Set(),
   feedActiveTags: new Set(),
   feedSort: knownFeedSort(vscode.getState()?.feedSort),
-  feedOpen: new Set(),
 };
 
 /** The split and the feed order are written together; there is only one slot. */
@@ -307,8 +304,10 @@ function feedFilterSections(): readonly FilterSection[] {
 }
 
 function renderHistoryFeed(): void {
-  // A menu is anchored to a button this repaint is about to replace.
+  // A menu is anchored to a button this repaint is about to replace, and an
+  // open dialog is about a run the host has just sent a new version of.
   closeMenu();
+  closeRunDialog();
 
   const total = state.feed.length;
   const bar = el('div', { class: 'stk-bar' }, [
@@ -394,9 +393,68 @@ function renderHistoryFeed(): void {
   root.replaceChildren(nav(), bar, filters, list);
 }
 
+/**
+ * One run, as a card you can click.
+ *
+ * The prompt used to expand in place: the excerpt was a button, and opening it
+ * grew the card inside a list of cards, so everything below jumped. It also had
+ * to look pressable, which meant a second highlighted surface inside a card
+ * that is already a surface. The whole card is the target now, and the prompt
+ * opens in a dialog over the feed instead of inside it — the list never moves,
+ * and there is room to actually read the thing.
+ *
+ * The buttons and the reference chips inside stop the click from reaching the
+ * card, so pressing Copy copies rather than opening a dialog about copying.
+ */
 function runCard(run: HistoryFeedRow): HTMLElement {
-  const open = state.feedOpen.has(run.id);
+  const card = el(
+    'div',
+    {
+      class: 'stk-run-card',
+      role: 'button',
+      tabindex: 0,
+      'aria-label': 'Open the prompt composed from ' + run.template,
+    },
+    [runHead(run), el('p', { class: 'stk-excerpt', text: firstLine(run.prompt, 260) }), runRefs(run)],
+  );
+  card.append(
+    el('div', { class: 'stk-run-actions' }, [
+      inCard(iconButton('copy', 'Copy prompt', () => post({ type: 'copyHistory', id: run.id }))),
+      inCard(variantButton(run)),
+      el('div', { class: 'stk-spacer' }),
+      // Removing one row is not the same act as clearing the feed: the two
+      // Clear buttons throw away work you cannot see from where you are
+      // standing and ask first, while this row is right in front of you and
+      // says what it is. A modal here would make tidying the feed a chore.
+      inCard(
+        iconButton('trash', 'Delete this prompt', () => post({ type: 'deleteHistory', id: run.id })),
+      ),
+    ]),
+  );
 
+  on(card, 'click', () => {
+    // Dragging across the excerpt to copy a phrase ends in a click on the
+    // card, and opening a dialog on top of the text you were reading is not
+    // what that gesture meant.
+    if ((window.getSelection()?.toString() ?? '').length > 0) return;
+    showRun(run);
+  });
+  on(card, 'keydown', (event) => {
+    const key = (event as KeyboardEvent).key;
+    // A div with role=button has to earn the two keys a real button gets.
+    if (key !== 'Enter' && key !== ' ') return;
+    event.preventDefault();
+    showRun(run);
+  });
+  return card;
+}
+
+/** Anything inside a clickable card that is itself clickable. */
+function inCard<T extends HTMLElement>(node: T): T {
+  return on(node, 'click', (event) => event.stopPropagation());
+}
+
+function runHead(run: HistoryFeedRow): HTMLElement {
   const head = el('div', { class: 'stk-run-top' }, [
     el('span', { class: 'stk-run-name', text: run.template }),
     el('span', { class: 'stk-when', text: ago(run.at), title: run.at }),
@@ -405,67 +463,159 @@ function runCard(run: HistoryFeedRow): HTMLElement {
   if (!run.templateExists) {
     head.append(el('span', { class: 'stk-chip stk-static stk-warn', text: 'template deleted' }));
   }
+  return head;
+}
 
-  // What it was made from: each block it drew on. This is the thing a prompt
-  // cannot tell you by reading it. The template is not repeated here — it is
-  // the heading of the card already.
-  const refs = el('div', { class: 'stk-ref' });
+/**
+ * What the prompt was made from, as links to the files themselves.
+ *
+ * This is the thing a prompt cannot tell you by reading it, and until now it
+ * was the thing you then had to go and find by hand. The template opens in the
+ * composer, a block opens its file — each chip goes where you would have gone.
+ *
+ * A template that has been deleted stays a plain chip: the run still records
+ * what it was made from, and there is no longer anywhere for it to lead.
+ */
+function runRefs(run: HistoryFeedRow): HTMLElement {
+  const refs = el('div', { class: 'stk-ref' }, [
+    run.templateExists
+      ? inCard(
+          on(
+            el('button', {
+              class: 'stk-chip stk-path',
+              type: 'button',
+              title: 'Open ' + run.template + ' in the composer',
+              text: run.template,
+            }),
+            'click',
+            () => post({ type: 'openTemplate', name: run.template }),
+          ),
+        )
+      : el('span', { class: 'stk-chip stk-static stk-path', text: run.template }),
+  ]);
   for (const block of run.blocks) {
+    const name = block.type + '/' + block.instance;
     refs.append(
-      el('span', {
-        class: 'stk-chip stk-static stk-path',
-        text: block.type + '/' + block.instance,
-      }),
+      inCard(
+        on(
+          el('button', {
+            class: 'stk-chip stk-path',
+            type: 'button',
+            title: 'Open ' + name,
+            text: name,
+          }),
+          'click',
+          () => post({ type: 'openBlockFile', blockType: block.type, instance: block.instance }),
+        ),
+      ),
     );
   }
+  return refs;
+}
 
-  const excerpt = on(
-    el('button', {
-      class: open ? 'stk-excerpt stk-excerpt-open' : 'stk-excerpt',
-      type: 'button',
-      title: open ? 'Collapse' : 'Show the whole prompt',
-      text: open ? run.prompt : firstLine(run.prompt, 260),
-    }),
-    'click',
-    () => {
-      if (open) state.feedOpen.delete(run.id);
-      else state.feedOpen.add(run.id);
-      renderHistoryFeed();
-    },
-  );
-
-  // `git-branch` rather than a stack of versions: varying a run is branching
-  // off it, and a version stack said "this prompt has revisions", which is the
-  // one thing a history entry never has — it is what was sent, once.
-  const variant = on(
+/**
+ * `git-branch` rather than a stack of versions: varying a run is branching off
+ * it, and a version stack said "this prompt has revisions", which is the one
+ * thing a history entry never has — it is what was sent, once.
+ */
+function variantButton(run: HistoryFeedRow, label?: string): HTMLElement {
+  return on(
     el(
       'button',
       {
-        class: 'stk-icon-button',
+        class: label ? 'stk-ghost stk-primary' : 'stk-icon-button',
         disabled: !run.templateExists,
         'aria-label': 'Create variant',
         title: run.templateExists
           ? 'Create variant - open the composer with these values'
           : 'The template this came from no longer exists',
       },
-      [icon('git-branch')],
+      label ? [icon('git-branch'), el('span', { text: label })] : [icon('git-branch')],
     ),
     'click',
     () => post({ type: 'variant', id: run.id }),
   );
+}
 
-  const actions = el('div', { class: 'stk-run-actions' }, [
-    iconButton('copy', 'Copy prompt', () => post({ type: 'copyHistory', id: run.id })),
-    variant,
-    el('div', { class: 'stk-spacer' }),
-    // Removing one row is not the same act as clearing the feed: the two Clear
-    // buttons throw away work you cannot see from where you are standing and
-    // ask first, while this row is right in front of you and says what it is.
-    // A modal here would make tidying the feed something you stop doing.
-    iconButton('trash', 'Delete this prompt', () => post({ type: 'deleteHistory', id: run.id })),
+// ── one run, in full ──────────────────────────────────────────────────
+
+/**
+ * The whole prompt, over the feed rather than inside it.
+ *
+ * A real `<dialog>`, opened modally, because the browser already implements
+ * the parts a hand-rolled overlay gets wrong: Escape, the focus trap, making
+ * the page behind it inert, and a backdrop that is one element rather than a
+ * stack of z-indexes. What is left to write is what is IN it.
+ */
+let runDialog: HTMLDialogElement | undefined;
+
+function closeRunDialog(): void {
+  runDialog?.close();
+  runDialog = undefined;
+}
+
+function showRun(run: HistoryFeedRow): void {
+  closeRunDialog();
+
+  const head = el('div', { class: 'stk-dialog-head' }, [
+    el('h2', { class: 'stk-dialog-title', text: run.template }),
+    el('span', { class: 'stk-when', text: ago(run.at), title: run.at }),
   ]);
+  if (run.via) head.append(el('span', { class: 'stk-chip stk-static', text: run.via }));
+  if (!run.templateExists) {
+    head.append(el('span', { class: 'stk-chip stk-static stk-warn', text: 'template deleted' }));
+  }
+  head.append(el('div', { class: 'stk-spacer' }));
+  head.append(iconButton('close', 'Close', closeRunDialog));
 
-  return el('div', { class: 'stk-run-card' }, [head, excerpt, refs, actions]);
+  const dialog = el('dialog', {
+    class: 'stk-dialog',
+    'aria-label': 'Prompt composed from ' + run.template,
+  }) as HTMLDialogElement;
+
+  dialog.append(head, runRefs(run));
+
+  // The values it was filled with. The prompt says what was asked; these say
+  // what you would be changing if you varied it, which the prose can bury.
+  const filled = Object.entries(run.values);
+  if (filled.length > 0) {
+    const values = el('dl', { class: 'stk-dialog-values' });
+    for (const [field, value] of filled) {
+      values.append(el('dt', { text: field }), el('dd', { text: value }));
+    }
+    dialog.append(values);
+  }
+
+  dialog.append(el('pre', { class: 'stk-dialog-prompt', text: run.prompt }));
+  dialog.append(
+    el('div', { class: 'stk-dialog-actions' }, [
+      on(
+        el('button', { class: 'stk-primary' }, [icon('copy'), el('span', { text: 'Copy prompt' })]),
+        'click',
+        () => post({ type: 'copyHistory', id: run.id }),
+      ),
+      on(variantButton(run, 'Create variant'), 'click', closeRunDialog),
+      el('div', { class: 'stk-spacer' }),
+      iconButton('trash', 'Delete this prompt', () => {
+        closeRunDialog();
+        post({ type: 'deleteHistory', id: run.id });
+      }),
+    ]),
+  );
+
+  // A click that lands on the dialog element itself came down on the backdrop,
+  // since every child fills the box. Escape is the browser's already.
+  on(dialog, 'click', (event) => {
+    if (event.target === dialog) closeRunDialog();
+  });
+  on(dialog, 'close', () => {
+    dialog.remove();
+    if (runDialog === dialog) runDialog = undefined;
+  });
+
+  document.body.append(dialog);
+  runDialog = dialog;
+  dialog.showModal();
 }
 
 // ── compose view ──────────────────────────────────────────────────────
@@ -480,6 +630,9 @@ function runCard(run: HistoryFeedRow): HTMLElement {
 function renderTemplate(): void {
   const detail = state.detail;
   if (!detail) return;
+  // Varying a run leaves the composer on screen; its dialog must not float
+  // over the form it just filled in.
+  closeRunDialog();
 
   const preview = el('pre', { class: 'stk-preview' });
   const status = el('span', { class: 'stk-status' });

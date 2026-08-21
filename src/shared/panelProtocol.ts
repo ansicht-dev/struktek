@@ -115,6 +115,13 @@ export type WebviewMessage =
   | { readonly type: 'pickTemplate' }
   | { readonly type: 'newTemplate' }
   | { readonly type: 'editTemplate'; readonly name: string }
+  /**
+   * Open the file behind a block a prompt drew on.
+   *
+   * No scope: a history entry records which block was used, not which library
+   * it came from, and the one that renders is the one worth opening.
+   */
+  | { readonly type: 'openBlockFile'; readonly blockType: string; readonly instance: string }
   | {
       readonly type: 'deliver';
       readonly name: string;
