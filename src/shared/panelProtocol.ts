@@ -123,4 +123,6 @@ export type WebviewMessage =
       readonly via: Delivery;
     }
   | { readonly type: 'clearHistory'; readonly name: string }
+  /** One entry, dropped. The two Clear messages are the bulk versions. */
+  | { readonly type: 'deleteHistory'; readonly id: string }
   | { readonly type: 'copyHistory'; readonly id: string };

@@ -297,6 +297,16 @@ export class StruktekPanel {
         return;
       }
 
+      case 'deleteHistory': {
+        // No confirmation: one row is a line in a log, it is on screen when
+        // you press the button, and a modal per row would make tidying the
+        // feed a chore. Clearing a template's history, or all of it, still
+        // asks — those throw away runs you cannot see from the button.
+        await deps.history.remove(message.id);
+        this.pushHistory();
+        return;
+      }
+
       case 'copyHistory': {
         const entry = deps.history.get(message.id);
         if (!entry) return;

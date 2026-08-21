@@ -52,9 +52,14 @@ const STYLES = `
 .stk-sub { color: var(--vscode-descriptionForeground); margin: 2px 0 0; }
 .stk-spacer { flex: 1; }
 
-/* Shared by the history feed's search row. */
-.stk-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-.stk-filters input { flex: 1; min-width: 200px; }
+/* The history feed's search row: the box, then the funnel and the sort button.
+   It no longer wraps, because it no longer holds a chip per template — those
+   moved into the funnel's menu, and what is left is a fixed three things. */
+.stk-filters { display: flex; gap: 6px; align-items: stretch; margin-bottom: 14px; }
+.stk-filters input { flex: 1 1 auto; min-width: 0; }
+/* The shared funnel is sized for the sidebar's 22px rows. Here it sits beside
+   a page-sized input, so it grows to match rather than floating in the row. */
+.stk-filters .stk-funnel { width: 28px; border-radius: 4px; }
 
 /* ── actions ────────────────────────────────────────────── */
 /* Secondary actions are icon-only with a tooltip, the way workbench toolbars
@@ -179,11 +184,17 @@ const STYLES = `
    rather than an unbounded card that pushes everything else off screen. */
 .stk-excerpt-open { max-height: 340px; overflow: auto; }
 .stk-ref { display: flex; gap: 5px; flex-wrap: wrap; }
-.stk-run-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Not wrapped: the row is two actions, a gap, and the one destructive action
+   pushed to the far edge — where it cannot be hit on the way to Copy. */
+.stk-run-actions { display: flex; gap: 8px; align-items: center; }
+/* Red only on approach. A trash can that is red at rest makes every card in
+   the feed look like a warning, on a screen that is nothing but cards. */
+.stk-run-actions .stk-icon-button:hover .codicon-trash { color: var(--vscode-editorError-foreground); }
 
 /* The feed keeps a tabular timestamp; everything else here was the composer
    repeating the same rows, which the history screen now owns alone. */
 .stk-when { font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground); font-size: .86em; }
+
 
 
 .stk-blank {

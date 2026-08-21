@@ -127,6 +127,37 @@ describe('persistence', () => {
   });
 });
 
+describe('deleting one entry', () => {
+  it('removes that entry and keeps the rest, on disk too', async () => {
+    const history = new History(runtime);
+    const first = history.record('a', {}, 'keep me');
+    const second = history.record('a', {}, 'remove me');
+    await history.flush();
+
+    expect(await history.remove(second.id)).toBe(true);
+    expect(history.all().map((e) => e.prompt)).toEqual(['keep me']);
+    expect(history.get(second.id)).toBeUndefined();
+    expect(history.get(first.id)).toBeDefined();
+
+    const reloaded = new History(runtime);
+    await reloaded.load();
+    expect(reloaded.all().map((e) => e.prompt)).toEqual(['keep me']);
+  });
+
+  /**
+   * The frame holds a snapshot, so the row it asks about may already be gone.
+   * That has to be a no-op the caller can recognise rather than a throw.
+   */
+  it('says so when the id is not there, and touches nothing', async () => {
+    const history = new History(runtime);
+    history.record('a', {}, 'keep me');
+    await history.flush();
+
+    expect(await history.remove('no-such-id')).toBe(false);
+    expect(history.all().map((e) => e.prompt)).toEqual(['keep me']);
+  });
+});
+
 describe('clearing', () => {
   it('clears one template and leaves the others', async () => {
     const history = new History(runtime);

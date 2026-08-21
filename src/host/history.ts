@@ -163,6 +163,21 @@ export class History {
     return entry;
   }
 
+  /**
+   * Drop one entry.
+   *
+   * Returns whether anything was removed, so a caller can tell a stale id from
+   * a deletion: the frame holds a snapshot, and the row it is asking about may
+   * already have been cleared by something else.
+   */
+  async remove(id: string): Promise<boolean> {
+    const remaining = this.entries.filter((entry) => entry.id !== id);
+    if (remaining.length === this.entries.length) return false;
+    this.entries = remaining;
+    await this.save();
+    return true;
+  }
+
   async clear(template?: string): Promise<void> {
     this.entries = template ? this.entries.filter((entry) => entry.template !== template) : [];
     await this.save();

@@ -12,19 +12,26 @@
  */
 
 import { render, type Field, type Node } from '../src/core';
+import { knownSort, orderBy, type SortOrder } from '../src/shared/sort';
+import { el, icon, on } from './dom';
+import { closeMenu } from './menu';
+import { filterButton, sortButton, type FilterSection, type SortSpec } from './toolbar';
 import type {
   BlockBodies,
   Delivery,
   HistoryFeedRow,
-  HistoryRow,
   HostMessage,
   TemplateDetail,
   WebviewMessage,
 } from '../src/shared/panelProtocol';
 
-/** Only the split position is worth keeping; everything else arrives fresh. */
+/**
+ * The split position and the feed's order, which are the two choices a repaint
+ * must not undo. Everything else arrives fresh from the host.
+ */
 interface PersistedState {
   readonly splitRatio: number;
+  readonly feedSort?: SortOrder;
 }
 
 interface VsCodeApi {
@@ -52,10 +59,59 @@ interface State {
   feedSearch: string;
   feedActiveTemplates: Set<string>;
   feedActiveTags: Set<string>;
+  feedSort: SortOrder;
   /** Which run's full prompt is open, keyed by entry id. */
   feedOpen: Set<string>;
   /** The seed already applied, so a repaint does not re-apply it. */
   seedId?: string;
+}
+
+/**
+ * Newest first.
+ *
+ * A feed is read from the top, and the prompt you want is nearly always the
+ * one you produced most recently.
+ */
+const FEED_SORT: SortOrder = { field: 'date', direction: 'desc' };
+
+/**
+ * How the feed can be ordered, and how each way round is worded.
+ *
+ * Two fields rather than the sidebar's three: `relevance` is a use count per
+ * template, which says nothing about one run among many of the same template.
+ * `date` is when the prompt was produced and `name` is the template it came
+ * from — the two things a row actually carries.
+ */
+const FEED_SORTS: readonly SortSpec[] = [
+  {
+    field: 'date',
+    label: 'Date',
+    directions: [
+      { direction: 'desc', label: 'Newest', hint: 'most recently composed first' },
+      { direction: 'asc', label: 'Oldest', hint: 'the first prompts you produced' },
+    ],
+  },
+  {
+    field: 'name',
+    label: 'Template',
+    directions: [
+      { direction: 'asc', label: 'Alphabetical', hint: 'A to Z, newest within each' },
+      { direction: 'desc', label: 'Reverse alphabetical', hint: 'Z to A, newest within each' },
+    ],
+  },
+];
+
+/**
+ * Narrow what the frame persisted to an order this screen actually offers.
+ *
+ * The stored value was written by whichever version of struktek last ran, and
+ * the two frames do not offer the same fields — the sidebar can persist
+ * `relevance`, which means nothing here. A stale preference degrades to the
+ * default rather than leaving the feed in an order with no menu entry.
+ */
+function knownFeedSort(value: unknown): SortOrder {
+  const order = knownSort(value);
+  return FEED_SORTS.some((spec) => spec.field === order.field) ? order : FEED_SORT;
 }
 
 const state: State = {
@@ -69,43 +125,19 @@ const state: State = {
   feedSearch: '',
   feedActiveTemplates: new Set(),
   feedActiveTags: new Set(),
+  feedSort: knownFeedSort(vscode.getState()?.feedSort),
   feedOpen: new Set(),
 };
 
-// ── tiny DOM helpers ──────────────────────────────────────────────────
-
-type Attrs = Record<string, string | number | boolean | undefined>;
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Attrs = {},
-  children: (globalThis.Node | string)[] = [],
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined || value === false) continue;
-    if (key === 'class') node.className = String(value);
-    else if (key === 'text') node.textContent = String(value);
-    else node.setAttribute(key, String(value));
-  }
-  for (const child of children) {
-    node.append(typeof child === 'string' ? document.createTextNode(child) : child);
-  }
-  return node;
+/** The split and the feed order are written together; there is only one slot. */
+function persist(): void {
+  vscode.setState({ splitRatio: state.splitRatio, feedSort: state.feedSort });
 }
 
-function on<T extends HTMLElement>(node: T, event: string, handler: (e: Event) => void): T {
-  node.addEventListener(event, handler);
-  return node;
-}
+// ── plumbing ──────────────────────────────────────────────────────────
 
 function post(message: WebviewMessage): void {
   vscode.postMessage(message);
-}
-
-/** A codicon, the workbench's own icon font — not a lookalike glyph. */
-function icon(name: string): HTMLElement {
-  return el('span', { class: 'codicon codicon-' + name, 'aria-hidden': 'true' });
 }
 
 /**
@@ -207,9 +239,16 @@ function nav(): HTMLElement {
 
 // ── history feed ──────────────────────────────────────────────────────
 
+/**
+ * The rows this screen is showing, narrowed and then ordered.
+ *
+ * Ordering runs through the same comparator the sidebar uses, over `at` parsed
+ * to epoch milliseconds — so "newest" means the same thing on both screens,
+ * and an unparseable timestamp sorts oldest rather than jumping to the top.
+ */
 function visibleRuns(): readonly HistoryFeedRow[] {
   const needle = state.feedSearch.trim().toLowerCase();
-  return state.feed.filter((run) => {
+  const matching = state.feed.filter((run) => {
     if (state.feedActiveTemplates.size > 0 && !state.feedActiveTemplates.has(run.template)) return false;
     if (state.feedActiveTags.size > 0 && !run.tags.some((tag) => state.feedActiveTags.has(tag))) {
       return false;
@@ -224,9 +263,53 @@ function visibleRuns(): readonly HistoryFeedRow[] {
       Object.values(run.values).some((value) => value.toLowerCase().includes(needle))
     );
   });
+
+  const keyed = matching.map((run) => ({ run, created: Date.parse(run.at) || 0 }));
+  const ordered = orderBy(keyed, (row) => row.run.template, state.feedSort);
+  // Ordered by template, the runs inside one name stay newest-first: the name
+  // is the key you chose, and within it recency is still what you want to read
+  // first. `orderBy` breaks its ties by name, which for a feed of one template
+  // is no tie-break at all.
+  if (state.feedSort.field === 'name') {
+    const flip = state.feedSort.direction === 'desc' ? -1 : 1;
+    ordered.sort(
+      (a, b) => a.run.template.localeCompare(b.run.template) * flip || b.created - a.created,
+    );
+  }
+  return ordered.map((row) => row.run);
+}
+
+/** What the funnel offers on this screen: the templates, and their tags. */
+function feedFilterSections(): readonly FilterSection[] {
+  return [
+    {
+      label: 'Templates',
+      empty: 'Nothing composed yet',
+      values: state.feedTemplates,
+      active: state.feedActiveTemplates,
+      toggle: (name) => {
+        if (state.feedActiveTemplates.has(name)) state.feedActiveTemplates.delete(name);
+        else state.feedActiveTemplates.add(name);
+      },
+    },
+    {
+      label: 'Tags',
+      empty: 'No tags on these templates',
+      values: state.feedTags,
+      active: state.feedActiveTags,
+      display: (tag) => '#' + tag,
+      toggle: (tag) => {
+        if (state.feedActiveTags.has(tag)) state.feedActiveTags.delete(tag);
+        else state.feedActiveTags.add(tag);
+      },
+    },
+  ];
 }
 
 function renderHistoryFeed(): void {
+  // A menu is anchored to a button this repaint is about to replace.
+  closeMenu();
+
   const total = state.feed.length;
   const bar = el('div', { class: 'stk-bar' }, [
     el('div', {}, [
@@ -267,31 +350,28 @@ function renderHistoryFeed(): void {
     list.replaceChildren(...runs());
   });
 
-  const filters = el('div', { class: 'stk-filters' }, [search]);
-  for (const name of state.feedTemplates) {
-    const active = state.feedActiveTemplates.has(name);
-    filters.append(
-      on(el('button', { class: 'stk-chip', 'aria-pressed': active, text: name }), 'click', () => {
-        if (active) state.feedActiveTemplates.delete(name);
-        else state.feedActiveTemplates.add(name);
+  // The same pair the sidebar's search box carries, and for the same reasons.
+  // The templates and tags this feed can be narrowed by are the user's own
+  // words, so the menu has to be drawn rather than contributed — and the row
+  // of chips they used to be shoved the whole feed down the page every time
+  // you reached for one, on the screen where the list is the entire point.
+  const filters = el('div', { class: 'stk-filters' }, [
+    search,
+    filterButton({
+      sections: feedFilterSections,
+      onChange: () => list.replaceChildren(...runs()),
+      onClear: () => {
+        state.feedActiveTemplates.clear();
+        state.feedActiveTags.clear();
         renderHistoryFeed();
-      }),
-    );
-  }
-  for (const tag of state.feedTags) {
-    const active = state.feedActiveTags.has(tag);
-    filters.append(
-      on(
-        el('button', { class: 'stk-chip', 'aria-pressed': active, text: '#' + tag }),
-        'click',
-        () => {
-          if (active) state.feedActiveTags.delete(tag);
-          else state.feedActiveTags.add(tag);
-          renderHistoryFeed();
-        },
-      ),
-    );
-  }
+      },
+    }),
+    sortButton(FEED_SORTS, state.feedSort, FEED_SORT, (order) => {
+      state.feedSort = order;
+      persist();
+      renderHistoryFeed();
+    }),
+  ]);
 
   function runs(): HTMLElement[] {
     const shown = visibleRuns();
@@ -326,14 +406,16 @@ function runCard(run: HistoryFeedRow): HTMLElement {
     head.append(el('span', { class: 'stk-chip stk-static stk-warn', text: 'template deleted' }));
   }
 
-  // What it was made from: the template, then each block it drew on. This is
-  // the thing a prompt cannot tell you by reading it.
-  const refs = el('div', { class: 'stk-ref' }, [
-    el('span', { class: 'stk-chip stk-static', text: run.template }),
-  ]);
+  // What it was made from: each block it drew on. This is the thing a prompt
+  // cannot tell you by reading it. The template is not repeated here — it is
+  // the heading of the card already.
+  const refs = el('div', { class: 'stk-ref' });
   for (const block of run.blocks) {
     refs.append(
-      el('span', { class: 'stk-chip stk-static', text: block.type + '/' + block.instance }),
+      el('span', {
+        class: 'stk-chip stk-static stk-path',
+        text: block.type + '/' + block.instance,
+      }),
     );
   }
 
@@ -352,6 +434,9 @@ function runCard(run: HistoryFeedRow): HTMLElement {
     },
   );
 
+  // `git-branch` rather than a stack of versions: varying a run is branching
+  // off it, and a version stack said "this prompt has revisions", which is the
+  // one thing a history entry never has — it is what was sent, once.
   const variant = on(
     el(
       'button',
@@ -363,7 +448,7 @@ function runCard(run: HistoryFeedRow): HTMLElement {
           ? 'Create variant - open the composer with these values'
           : 'The template this came from no longer exists',
       },
-      [icon('versions')],
+      [icon('git-branch')],
     ),
     'click',
     () => post({ type: 'variant', id: run.id }),
@@ -372,6 +457,12 @@ function runCard(run: HistoryFeedRow): HTMLElement {
   const actions = el('div', { class: 'stk-run-actions' }, [
     iconButton('copy', 'Copy prompt', () => post({ type: 'copyHistory', id: run.id })),
     variant,
+    el('div', { class: 'stk-spacer' }),
+    // Removing one row is not the same act as clearing the feed: the two Clear
+    // buttons throw away work you cannot see from where you are standing and
+    // ask first, while this row is right in front of you and says what it is.
+    // A modal here would make tidying the feed something you stop doing.
+    iconButton('trash', 'Delete this prompt', () => post({ type: 'deleteHistory', id: run.id })),
   ]);
 
   return el('div', { class: 'stk-run-card' }, [head, excerpt, refs, actions]);
