@@ -93,9 +93,26 @@ body {
 /* None of these are styled by VS Code for us. Left alone they fall back to
    user-agent colours, which are built for a white page. */
 
+/*
+ * Selected text takes a PAIR of tokens, not a background with its foreground
+ * left to chance.
+ *
+ * This used to be editor.selectionBackground with editor.selectionForeground
+ * behind an "inherit" fallback, and most themes leave that foreground unset:
+ * in the editor the selection sits under syntax-coloured text and the theme
+ * tunes the fill against those colours. Our frames have no syntax colouring —
+ * a prompt is one flat foreground — so the same fill lands under a single
+ * near-white, and in themes whose selection is a light or saturated tint the
+ * result is text you cannot read while you are dragging over it.
+ *
+ * list.activeSelection* is a pair every theme defines together and guarantees
+ * against itself, which is exactly the property that was missing. The editor
+ * pair stays as the fallback, foreground and background both, so a theme that
+ * does define selectionForeground still gets what it asked for.
+ */
 ::selection {
-  background: var(--vscode-editor-selectionBackground);
-  color: var(--vscode-editor-selectionForeground, inherit);
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-editor-selectionBackground));
+  color: var(--vscode-list-activeSelectionForeground, var(--vscode-editor-selectionForeground, inherit));
 }
 ::placeholder { color: var(--vscode-input-placeholderForeground); opacity: 1; }
 
@@ -317,15 +334,55 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
   border-bottom: 1px solid var(--vscode-menu-separatorBackground, var(--vscode-disabledForeground));
 }
 
-/* ── shared idioms ──────────────────────────────────────── */
+/* ── shared idioms ─────────────────────── */
+/*
+ * A chip is a LABEL, not a badge.
+ *
+ * It used to be drawn in the badge colours, which are a theme's attention
+ * pair — a saturated fill meant to carry a number you must not miss. On a
+ * history card, where every row carries the template it came from and each
+ * block it drew on, that painted the quietest information on the card in the
+ * loudest colour the theme owns, and in several themes it landed as white on
+ * something bright enough to make the text hard to read at all.
+ *
+ * So chips are outlined instead: the card's own text colour, dimmed, inside a
+ * hairline. Contrast then comes from the foreground token, which every theme
+ * guarantees against its background, rather than from a fill pairing nobody
+ * checked. The badge colours are still right for a count, and the section
+ * counts in the sidebar still use them.
+ *
+ * Nearly square, too. A pill reads as something you can pick up and take off,
+ * which is what a filter chip is; these name a file the prompt was built from,
+ * so they take the corner radius of the code they refer to.
+ */
 .stk-chip {
-  display: inline-block; padding: 1px 8px; border-radius: 10px;
-  font-size: .82em; line-height: 1.7;
-  background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
-  border: 1px solid var(--vscode-contrastBorder, transparent); cursor: pointer;
+  display: inline-block; padding: 0 6px; border-radius: 3px;
+  font-size: .82em; line-height: 1.75;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  cursor: pointer;
 }
-.stk-chip[aria-pressed="true"] { border-color: var(--vscode-focusBorder); }
+/* A chip that is a button is still a chip: the base button rules would paint
+   it in the button colours the moment you touched it, and "button:hover" is
+   one class heavier than ".stk-chip", so the quieter treatment has to be
+   spelled out at a weight that beats it. */
+.stk-chip:not(.stk-static):hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+  border-color: var(--vscode-focusBorder);
+}
+/* Pressed is a real state, so it takes the workbench's toggle pair — the same
+   one the funnel uses when a filter is on. */
+.stk-chip[aria-pressed="true"] {
+  background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground));
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+}
 .stk-chip.stk-static { cursor: default; }
+/* A block reference is a path — type over instance — so it is set in the
+   editor's font, the way any other identifier on screen is. */
+.stk-chip.stk-path { font-family: var(--vscode-editor-font-family); }
 /* The global badge: a chip with its icon, reading as provenance rather than as
    a tag you could click off. The icon is decoration — the word carries it. */
 .stk-chip.stk-scope { display: inline-flex; align-items: center; gap: 4px; }
