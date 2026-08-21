@@ -64,7 +64,8 @@ export class StruktekPanel {
       this.screen = 'template';
     }
     if (this.panel) {
-      this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Active);
+      // Wherever it already is - revealing an open panel must not move it.
+      this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Beside);
       this.push();
       return;
     }
@@ -72,7 +73,12 @@ export class StruktekPanel {
     this.panel = vscode.window.createWebviewPanel(
       PANEL_VIEW_TYPE,
       'Struktek',
-      vscode.ViewColumn.Active,
+      // Beside, never Active. The panel is something you compose FROM — you
+      // are looking at a file and want a prompt about it — so opening as
+      // another tab in the group you are working in hides the very thing you
+      // opened it for. Beside reuses the group to the right when there is one
+      // rather than splitting again, so this costs a column once.
+      vscode.ViewColumn.Beside,
       {
         enableScripts: true,
         // Cheap here — the panel holds unsaved form values, and rebuilding it
