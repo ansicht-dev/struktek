@@ -11,6 +11,21 @@
  * webview all run the same parser, so filesystem access is always injected.
  */
 
+/**
+ * Which library a template or a block was read from.
+ *
+ * `workspace` is the `.struktek/` in the open folder; `global` is the one in
+ * the user's home directory, visible from every workspace. It is provenance,
+ * not vocabulary — nothing in the template language reads differently because
+ * of it, and a template cannot ask which scope it is in. It exists so the UI
+ * can say where a thing lives, and so moving it between the two is a rename
+ * rather than a rewrite.
+ */
+export type LibraryScope = 'workspace' | 'global';
+
+/** Workspace beats global wherever the two libraries collide, by name. */
+export const SCOPE_PRECEDENCE: readonly LibraryScope[] = ['global', 'workspace'];
+
 /** Half-open offset range into the source the span was produced from. */
 export interface Span {
   readonly start: number;
@@ -130,6 +145,13 @@ export interface TemplateModel {
    * of it - spans point into this, and an editor cannot round-trip without it.
    */
   readonly source?: string;
+  /**
+   * Which library this was read from, when a loader said.
+   *
+   * Absent for the same reason `source` is: `analyze()` alone has no idea, and
+   * a caller that built the model by hand should not have to invent one.
+   */
+  readonly scope?: LibraryScope;
   readonly description?: string;
   readonly tags: readonly string[];
   readonly note?: string;

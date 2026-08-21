@@ -43,7 +43,14 @@ beforeEach(async () => {
   await writeFile(path.join(library, 'blocks', 'output-format', 'prose.md'), 'Answer in prose.\n');
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  bridge = await connectBridge(serverTransport, { workspaceRoot: workspace, offlineOnly: true });
+  // No global library: these tests are about the workspace one, and left to
+  // default the bridge would read whatever `~/.struktek` the machine running
+  // the suite happens to have.
+  bridge = await connectBridge(serverTransport, {
+    workspaceRoot: workspace,
+    globalRoot: false,
+    offlineOnly: true,
+  });
   client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(clientTransport);
 });

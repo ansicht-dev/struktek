@@ -138,6 +138,20 @@
       {
         "command": "struktek.showTemplate",
         "title": "Struktek: Open Template in Panel"
+      },
+      {
+        "command": "struktek.makeGlobal",
+        "title": "Struktek: Make Global",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "struktek.makeWorkspace",
+        "title": "Struktek: Make Workspace-Only",
+        "icon": "$(root-folder)"
+      },
+      {
+        "command": "struktek.openGlobalLibrary",
+        "title": "Struktek: Reveal Global Library"
       }
     ],
     "menus": {
@@ -156,6 +170,11 @@
           "command": "struktek.configureMcp",
           "when": "view == struktek.sidebar",
           "group": "1_struktek@1"
+        },
+        {
+          "command": "struktek.openGlobalLibrary",
+          "when": "view == struktek.sidebar",
+          "group": "1_struktek@2"
         }
       ],
       "commandPalette": [
@@ -210,6 +229,16 @@
           "type": "string",
           "default": ".struktek",
           "description": "Workspace-relative folder holding `templates/` and `blocks/`. Reload the window to apply."
+        },
+        "struktek.globalLibrary.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also load a global library, visible from every workspace. A template of the same name in the workspace overrides the global one. Reload the window to apply."
+        },
+        "struktek.globalLibrary.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the global library lives. Empty means `~/.struktek`. Must be absolute or start with `~/` — a relative path has no project to be relative to. Reload the window to apply."
         },
         "struktek.logLevel": {
           "type": "string",

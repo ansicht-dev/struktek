@@ -19,12 +19,15 @@ export {
 export {
   loadBlocks,
   mapBlockReader,
+  mergeBlockLibraries,
   readBlockFile,
   EMPTY_BLOCK_LIBRARY,
   type BlockFile,
   type BlockLibrary,
   type BlockReader,
   type LoadBlocksOptions,
+  type MergedBlocks,
+  type ShadowedBlock,
 } from './blocks';
 export {
   coerceTags,

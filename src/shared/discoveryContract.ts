@@ -35,6 +35,18 @@ export interface DiscoveryDocument {
    * VS Code where they went.
    */
   readonly library: string;
+  /**
+   * Absolute path to the global library root, when one is in use.
+   *
+   * Same reason `library` is here, one level up: the path is configurable and
+   * can be switched off, and the offline bridge would otherwise fall back to
+   * its own `~/.struktek` guess — serving a different set of templates than
+   * the editor does, which is the one thing the two must never do.
+   *
+   * Absent means the user has no global library, and the bridge should not
+   * invent one.
+   */
+  readonly globalLibrary?: string;
   /** PID of the owning extension host, so a reader can spot a stale file. */
   readonly pid: number;
   readonly schema: number;

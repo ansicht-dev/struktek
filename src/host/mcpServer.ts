@@ -37,6 +37,8 @@ export const MCP_ENDPOINT = '/mcp';
 export interface McpContext {
   readonly workspaceRoot: string;
   readonly libraryRoot: string;
+  /** The global library root, when the user has one. */
+  readonly globalLibraryRoot?: string;
   readonly version: string;
   /** Read per request, never snapshotted — the library is watched and mutates. */
   readonly view: () => LibraryView;
@@ -236,6 +238,9 @@ export class McpServerHost {
       token,
       workspace: this.context.workspaceRoot,
       library: this.context.libraryRoot,
+      ...(this.context.globalLibraryRoot
+        ? { globalLibrary: this.context.globalLibraryRoot }
+        : {}),
       pid: process.pid,
       schema: DISCOVERY_SCHEMA,
     };

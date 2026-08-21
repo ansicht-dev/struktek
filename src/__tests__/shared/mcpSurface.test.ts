@@ -380,3 +380,108 @@ describe('saving a template that would not parse', () => {
     expect(saved).toHaveLength(1);
   });
 });
+
+/**
+ * Where a save lands.
+ *
+ * The scope argument is the model's only way to reach the global library, and
+ * the asymmetry matters: writing into the workspace touches one project,
+ * writing globally touches every project the user opens. So the argument only
+ * appears when there is genuinely a choice, the default is the cautious side,
+ * and a scope this host cannot write to is refused rather than redirected.
+ */
+describe('choosing which library a save goes to', () => {
+  const twoScoped = (record: { scope?: string }[] = []): LibraryView => ({
+    ...view(),
+    write: {
+      parseYaml,
+      scopes: () => ['workspace', 'global'],
+      saveTemplate: async (_name, _body, scope) => {
+        record.push({ ...(scope ? { scope } : {}) });
+      },
+      saveBlock: async (_type, _instance, _body, scope) => {
+        record.push({ ...(scope ? { scope } : {}) });
+      },
+    },
+  });
+
+  const oneScoped = (): LibraryView => ({
+    ...view(),
+    write: {
+      parseYaml,
+      scopes: () => ['workspace'],
+      saveTemplate: async () => undefined,
+      saveBlock: async () => undefined,
+    },
+  });
+
+  const scopeSchema = (tool: string, library: LibraryView): Record<string, unknown> | undefined => {
+    const found = toolDefinitionsFor(library).find((candidate) => candidate.name === tool);
+    return found?.inputSchema.properties['scope'] as Record<string, unknown> | undefined;
+  };
+
+  it('offers the argument on both save tools when there are two libraries', () => {
+    for (const tool of [SAVE_TEMPLATE_TOOL, SAVE_BLOCK_TOOL]) {
+      expect(scopeSchema(tool, twoScoped())?.['enum'], tool).toEqual(['workspace', 'global']);
+    }
+  });
+
+  it('leaves the argument off entirely when there is only one library', () => {
+    // An enum with one member invites a model to reason about a decision that
+    // has already been made for it.
+    for (const tool of [SAVE_TEMPLATE_TOOL, SAVE_BLOCK_TOOL]) {
+      expect(scopeSchema(tool, oneScoped()), tool).toBeUndefined();
+    }
+  });
+
+  it('leaves it off for a writer that does not distinguish libraries at all', () => {
+    const legacy: LibraryView = {
+      ...view(),
+      write: { parseYaml, saveTemplate: async () => undefined, saveBlock: async () => undefined },
+    };
+    expect(scopeSchema(SAVE_TEMPLATE_TOOL, legacy)).toBeUndefined();
+  });
+
+  it('passes an omitted scope straight through as the host default', async () => {
+    const record: { scope?: string }[] = [];
+    const result = await saveTemplatePayload(twoScoped(record), 'scratch', 'Hello {{ who }}');
+    expect(result.error).toBeUndefined();
+    expect(record).toEqual([{}]);
+    expect(result.scope).toBeUndefined();
+  });
+
+  it('passes a requested scope through and echoes it back', async () => {
+    const record: { scope?: string }[] = [];
+    const result = await saveTemplatePayload(
+      twoScoped(record),
+      'scratch',
+      'Hello {{ who }}',
+      'global',
+    );
+    expect(record).toEqual([{ scope: 'global' }]);
+    expect(result.scope).toBe('global');
+  });
+
+  it('does the same for a block', async () => {
+    const record: { scope?: string }[] = [];
+    const result = await saveBlockPayload(twoScoped(record), 'tone', 'blunt', 'Be blunt.', 'global');
+    expect(record).toEqual([{ scope: 'global' }]);
+    expect(result.saved).toBe('struktek://block/tone/blunt');
+    expect(result.scope).toBe('global');
+  });
+
+  it('refuses a scope this host cannot write to, rather than redirecting', async () => {
+    // Silently writing it somewhere else would leave the model believing its
+    // template is global when it landed in one project.
+    const record: { scope?: string }[] = [];
+    const result = await saveTemplatePayload(oneScoped(), 'scratch', 'Hello {{ who }}', 'global');
+    expect(result.saved).toBeUndefined();
+    expect(result.error).toContain('global');
+    expect(record).toEqual([]);
+  });
+
+  it('refuses a scope that is not a scope', async () => {
+    const result = await saveTemplatePayload(twoScoped(), 'scratch', 'Hello', 'everywhere');
+    expect(result.error).toContain('everywhere');
+  });
+});

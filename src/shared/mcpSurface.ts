@@ -26,6 +26,7 @@ import {
   validateValues,
   type BlockLibrary,
   type Field,
+  type LibraryScope,
   type TemplateModel,
 } from '../core';
 
@@ -69,12 +70,35 @@ export interface LibraryWriter {
    * than in whichever host happens to be calling.
    */
   readonly parseYaml: (source: string) => unknown;
-  saveTemplate(name: string, body: string): Promise<void>;
-  saveBlock(type: string, instance: string, body: string): Promise<void>;
+  /**
+   * Which libraries this host can actually write to, most local first.
+   *
+   * The tool only offers `scope` as a parameter when there is more than one,
+   * so a model working in a window with no folder open is not asked to choose
+   * between two places one of which does not exist. Absent means the same as
+   * one: a writer that does not distinguish libraries has nothing to choose
+   * between, and the argument stays off its schema.
+   */
+  scopes?(): readonly LibraryScope[];
+  saveTemplate(name: string, body: string, scope?: LibraryScope): Promise<void>;
+  saveBlock(type: string, instance: string, body: string, scope?: LibraryScope): Promise<void>;
 }
 
 export const SAVE_TEMPLATE_TOOL = 'struktek_save_template';
 export const SAVE_BLOCK_TOOL = 'struktek_save_block';
+
+/**
+ * The answer to a save, including where it landed.
+ *
+ * `scope` is echoed rather than assumed: the caller may have omitted it, and
+ * "saved into the workspace" versus "saved for every project" is the part of
+ * the outcome worth reporting back.
+ */
+export interface SaveResult {
+  readonly saved?: string;
+  readonly scope?: LibraryScope;
+  readonly error?: string;
+}
 
 /**
  * What the server tells a client on connect.
@@ -201,6 +225,10 @@ export function listTemplatesPayload(view: LibraryView): unknown {
     templates: view.templates().map((model) => ({
       name: model.name,
       ...(model.description ? { description: model.description } : {}),
+      // Only when it is global. A model does not need telling that the
+      // workspace's own templates are the workspace's — but it does need to
+      // know which ones it would be changing for every other project.
+      ...(model.scope === 'global' ? { scope: 'global' } : {}),
       fields: model.fields.map((field) => {
         const options = optionsFor(field, blocks);
         return {
@@ -257,10 +285,13 @@ export async function saveTemplatePayload(
   view: LibraryView,
   name: string,
   body: string,
-): Promise<{ readonly saved?: string; readonly error?: string }> {
+  scope?: string,
+): Promise<SaveResult> {
   if (!view.write) return { error: notWritable };
   const bad = badName(name);
   if (bad) return { error: bad };
+  const target = coerceScope(view, scope);
+  if ('error' in target) return target;
 
   // Errors only. A warning is a judgement call the author is allowed to make -
   // "[see notes]" is prose, not a mistake - but an unknown type or a field
@@ -279,11 +310,11 @@ export async function saveTemplatePayload(
   }
 
   try {
-    await view.write.saveTemplate(name, body);
+    await view.write.saveTemplate(name, body, target.scope);
   } catch (err) {
     return { error: 'Could not save "' + name + '": ' + String(err) };
   }
-  return { saved: 'struktek://template/' + name };
+  return { saved: 'struktek://template/' + name, scope: target.scope };
 }
 
 export async function saveBlockPayload(
@@ -291,17 +322,44 @@ export async function saveBlockPayload(
   type: string,
   instance: string,
   body: string,
-): Promise<{ readonly saved?: string; readonly error?: string }> {
+  scope?: string,
+): Promise<SaveResult> {
   if (!view.write) return { error: notWritable };
   const bad = badName(type) ?? badName(instance);
   if (bad) return { error: bad };
+  const target = coerceScope(view, scope);
+  if ('error' in target) return target;
 
   try {
-    await view.write.saveBlock(type, instance, body);
+    await view.write.saveBlock(type, instance, body, target.scope);
   } catch (err) {
     return { error: 'Could not save "' + type + '/' + instance + '": ' + String(err) };
   }
-  return { saved: 'struktek://block/' + type + '/' + instance };
+  return { saved: 'struktek://block/' + type + '/' + instance, scope: target.scope };
+}
+
+/**
+ * Resolve the requested scope, refusing one this host cannot write to.
+ *
+ * Refused rather than silently redirected: "global" and "workspace" mean
+ * different things to everyone who later reads the file, and a model told its
+ * template is global when it landed in one project would go on to rely on
+ * that. Omitted is not a refusal — it means the host's own default.
+ */
+function coerceScope(
+  view: LibraryView,
+  scope: string | undefined,
+): { readonly scope?: LibraryScope } | { readonly error: string } {
+  if (scope === undefined) return {};
+  const available = view.write?.scopes?.() ?? [];
+  if (!available.includes(scope as LibraryScope)) {
+    return {
+      error:
+        '"' + scope + '" is not a library this workspace can write to. Available: ' +
+        (available.join(', ') || '(none)') + '. Omit "scope" to use the default.',
+    };
+  }
+  return { scope: scope as LibraryScope };
 }
 
 const notWritable =
@@ -576,8 +634,50 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
  */
 export function toolDefinitionsFor(view: LibraryView): ToolDefinition[] {
   const writes = new Set([SAVE_TEMPLATE_TOOL, SAVE_BLOCK_TOOL]);
-  return TOOL_DEFINITIONS.filter((tool) => view.write || !writes.has(tool.name));
+  return TOOL_DEFINITIONS.filter((tool) => view.write || !writes.has(tool.name)).map((tool) =>
+    writes.has(tool.name) ? withScopeArgument(tool, view) : tool,
+  );
 }
+
+/**
+ * Add the `scope` parameter, but only where there is a choice to make.
+ *
+ * A window with one writable library gets the tool exactly as it was. Offering
+ * an enum with a single member would invite a model to reason about a decision
+ * that has already been made for it, and every token spent on that is a token
+ * not spent on the template.
+ */
+function withScopeArgument(tool: ToolDefinition, view: LibraryView): ToolDefinition {
+  const scopes = view.write?.scopes?.() ?? [];
+  if (scopes.length < 2) return tool;
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        ...tool.inputSchema.properties,
+        scope: {
+          type: 'string',
+          enum: [...scopes],
+          description: SCOPE_ARGUMENT_HELP,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * What a model needs to pick a scope, in the only place it will read it.
+ *
+ * The asymmetry is the whole message: writing into the workspace affects one
+ * project, writing globally affects every one of them, and the default is the
+ * cautious side.
+ */
+export const SCOPE_ARGUMENT_HELP =
+  'which library to write to. "workspace" (the default) is this project only. ' +
+  '"global" is the user\'s home library, visible from every project they open — ' +
+  'use it only when the template is genuinely not about this codebase, or when ' +
+  'the user asked for it.';
 
 export function callToolDirect(
   view: LibraryView,
@@ -662,6 +762,26 @@ export function createStruktekServer(getLibrary: () => LibraryView, version: str
   // reads straight off disk, and a tool that cannot do what it says is worse
   // than one that is not offered.
   if (getLibrary().write) {
+    /**
+     * The scope argument, or nothing, matching what the tool listing advertises.
+     *
+     * Read once at registration because the SDK schema is fixed for the life of
+     * the server, and the set of writable libraries only changes when the
+     * workspace does — which replaces the server anyway.
+     */
+    const scopes = getLibrary().write?.scopes?.() ?? [];
+    const scopeSchema: Shape =
+      scopes.length < 2
+        ? {}
+        : {
+            scope: z
+              .enum(scopes as unknown as [string, ...string[]])
+              .optional()
+              .describe(SCOPE_ARGUMENT_HELP),
+          };
+    const scopeArg = (args: Record<string, unknown>): string | undefined =>
+      typeof args['scope'] === 'string' ? args['scope'] : undefined;
+
     const saveTemplate = definitionOf(SAVE_TEMPLATE_TOOL);
     registerTool(
       saveTemplate.name,
@@ -671,6 +791,7 @@ export function createStruktekServer(getLibrary: () => LibraryView, version: str
         inputSchema: {
           name: z.string().describe('template name; replaces an existing one of the same name'),
           body: z.string().describe('the whole file, frontmatter included'),
+          ...scopeSchema,
         },
       },
       async (args) =>
@@ -679,6 +800,7 @@ export function createStruktekServer(getLibrary: () => LibraryView, version: str
             getLibrary(),
             String(args["name"] ?? ""),
             String(args["body"] ?? ""),
+            scopeArg(args),
           ),
         ),
     );
@@ -693,6 +815,7 @@ export function createStruktekServer(getLibrary: () => LibraryView, version: str
           type: z.string().describe('block type name; created if it does not exist yet'),
           instance: z.string().describe('the value name within that type'),
           body: z.string().describe('the whole file, frontmatter included'),
+          ...scopeSchema,
         },
       },
       async (args) =>
@@ -702,6 +825,7 @@ export function createStruktekServer(getLibrary: () => LibraryView, version: str
             String(args["type"] ?? ""),
             String(args["instance"] ?? ""),
             String(args["body"] ?? ""),
+            scopeArg(args),
           ),
         ),
     );

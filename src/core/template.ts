@@ -11,7 +11,7 @@
 
 import { parse } from './parse';
 import { analyze, type AnalyzeOptions } from './analyze';
-import type { Frontmatter, TemplateModel } from './types';
+import type { Frontmatter, LibraryScope, TemplateModel } from './types';
 
 export interface SplitTemplate {
   readonly frontmatter?: Frontmatter;
@@ -70,6 +70,8 @@ export type YamlParser = (source: string) => unknown;
 
 export interface LoadTemplateOptions extends Omit<AnalyzeOptions, 'frontmatter'> {
   readonly parseYaml: YamlParser;
+  /** Which library the file came from. Recorded, never interpreted. */
+  readonly scope?: LibraryScope;
 }
 
 /** The whole pipeline: file text in, model out. */
@@ -78,6 +80,7 @@ export function loadTemplate(source: string, opts: LoadTemplateOptions): Templat
   const parsed = parse(split.body, split.bodyOffset);
   return {
     source,
+    ...(opts.scope ? { scope: opts.scope } : {}),
     ...analyze(parsed, {
       name: opts.name,
       ...(split.frontmatter ? { frontmatter: split.frontmatter } : {}),

@@ -15,7 +15,15 @@ import { parse as parseYaml } from 'yaml';
 import { composeCommand } from './compose';
 import { configureMcpCommand } from './configureMcp';
 import { blockRefs, History } from './history';
-import { BLOCKS_DIR, Library, resolveLibraryRoot, TEMPLATES_DIR } from './library';
+import {
+  BLOCKS_DIR,
+  Library,
+  resolveGlobalLibraryRoot,
+  resolveLibraryRoot,
+  TEMPLATES_DIR,
+} from './library';
+import { moveToScope, pickScopeTarget, type ScopeTarget } from './scope';
+import type { LibraryScope } from '../core';
 import type { LibraryWriter } from '../shared/mcpSurface';
 import { initLog, log, setLogLevel, type LogLevel } from './log';
 import { McpServerHost } from './mcpServer';
@@ -30,7 +38,15 @@ interface Session {
   readonly library: Library;
   readonly stats: Stats;
   readonly history: History;
-  readonly workspaceRoot: string;
+  /**
+   * Absent when no folder is open.
+   *
+   * A session used to require one, because the library did. It no longer does:
+   * the global library is there whatever is open, and a window with no folder
+   * can still compose from it. What still needs a workspace is the MCP server,
+   * whose discovery file has to sit somewhere an agent will look.
+   */
+  readonly workspaceRoot?: string;
   mcp?: McpServerHost;
 }
 
@@ -133,20 +149,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('struktek.newBlock', (blockType?: unknown) =>
       withSession((s) => newBlock(s.library, blockTypeOf(blockType))),
     ),
-    vscode.commands.registerCommand('struktek.deleteTemplate', (node?: unknown) =>
-      withSession((s) => deleteTemplate(s.library, node)),
+    vscode.commands.registerCommand('struktek.deleteTemplate', (node?: unknown, scope?: unknown) =>
+      withSession((s) => deleteTemplate(s.library, node, scopeOf(scope))),
     ),
-    vscode.commands.registerCommand('struktek.deleteBlock', (blockType?: unknown, instance?: unknown) =>
-      withSession((s) => deleteBlock(s.library, blockType, instance)),
+    vscode.commands.registerCommand(
+      'struktek.deleteBlock',
+      (blockType?: unknown, instance?: unknown, scope?: unknown) =>
+        withSession((s) => deleteBlock(s.library, blockType, instance, scopeOf(scope))),
     ),
-    vscode.commands.registerCommand('struktek.deleteBlockType', (node?: unknown) =>
-      withSession((s) => deleteBlockType(s.library, node)),
+    vscode.commands.registerCommand('struktek.deleteBlockType', (node?: unknown, scope?: unknown) =>
+      withSession((s) => deleteBlockType(s.library, node, scopeOf(scope))),
     ),
     vscode.commands.registerCommand('struktek.openLibrary', () =>
       withSession((s) => openLibrary(s.library)),
     ),
     vscode.commands.registerCommand('struktek.configureMcp', () =>
-      withSession((s) => configureMcpCommand(s.workspaceRoot)),
+      withSession(async (s) => {
+        // The generated config points an agent at a workspace; with none open
+        // there is nothing to point it at.
+        if (!s.workspaceRoot) {
+          void vscode.window.showWarningMessage(
+            'Struktek: open a workspace folder first — an agent config has to name one.',
+          );
+          return;
+        }
+        await configureMcpCommand(s.workspaceRoot);
+      }),
+    ),
+    vscode.commands.registerCommand('struktek.makeGlobal', (target?: unknown, second?: unknown) =>
+      withSession((s) => changeScope(s.library, 'global', target, second)),
+    ),
+    vscode.commands.registerCommand('struktek.makeWorkspace', (target?: unknown, second?: unknown) =>
+      withSession((s) => changeScope(s.library, 'workspace', target, second)),
+    ),
+    vscode.commands.registerCommand('struktek.openGlobalLibrary', () =>
+      withSession(async (s) => {
+        const root = s.library.rootFor('global');
+        if (!root) {
+          void vscode.window.showWarningMessage(
+            'Struktek: the global library is switched off — see struktek.globalLibrary.enabled.',
+          );
+          return;
+        }
+        // Reveal rather than open as a folder: opening it would replace the
+        // workspace the user is working in, which is not what "show me my
+        // global templates" asks for.
+        await vscode.env.openExternal(root);
+      }),
     ),
     vscode.commands.registerCommand(MCP_STATUS_COMMAND, () => mcpStatus?.pick()),
     vscode.commands.registerCommand('struktek.restartMcp', () =>
@@ -178,23 +227,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       }),
     ),
-    vscode.commands.registerCommand('struktek.openTemplate', (target?: unknown) =>
+    vscode.commands.registerCommand('struktek.openTemplate', (target?: unknown, scope?: unknown) =>
       withSession(async (s) => {
         // A name from the sidebar, a tree item from anywhere else, or nothing
-        // from the palette — all three have to land on the same file.
+        // from the palette — all three have to land on the same file. A scope
+        // narrows it to one copy, which is what an overridden row needs.
         const name = templateNameOf(target);
         const uri =
-          (name ? s.library.get(name)?.uri : undefined) ??
+          (name ? templateEntry(s.library, name, scopeOf(scope))?.uri : undefined) ??
           (target as { resourceUri?: vscode.Uri } | undefined)?.resourceUri ??
           s.library.list()[0]?.uri;
         if (!uri) return;
         await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
       }),
     ),
-    vscode.commands.registerCommand('struktek.openBlock', (type?: string, instance?: string) =>
+    vscode.commands.registerCommand(
+      'struktek.openBlock',
+      (type?: string, instance?: string, scope?: unknown) =>
       withSession(async (s) => {
         if (!type || !instance) return;
-        const uri = await s.library.blockUri(type, instance);
+        const uri = await s.library.blockUri(type, instance, scopeOf(scope));
         if (!uri) {
           void vscode.window.showWarningMessage('Struktek: could not locate ' + type + '/' + instance + '.');
           return;
@@ -230,12 +282,16 @@ function applyLogLevel(): void {
 async function openSession(): Promise<void> {
   closeSession();
   const folder = vscode.workspace.workspaceFolders?.[0];
-  const root = resolveLibraryRoot();
-  if (!folder || !root) {
-    log('No workspace folder — struktek is idle until one is opened');
+  const workspaceRoot = resolveLibraryRoot();
+  const globalRoot = resolveGlobalLibraryRoot();
+  if (!workspaceRoot && !globalRoot) {
+    log('No workspace folder and no global library — struktek is idle');
     return;
   }
-  const library = new Library(root);
+  const library = new Library({
+    ...(workspaceRoot ? { workspace: workspaceRoot } : {}),
+    ...(globalRoot ? { global: globalRoot } : {}),
+  });
   await library.reload();
   library.watch();
 
@@ -245,7 +301,12 @@ async function openSession(): Promise<void> {
   const history = new History(library.runtimeDir, historyLimit());
   await history.load();
 
-  const current: Session = { library, stats, history, workspaceRoot: folder.uri.fsPath };
+  const current: Session = {
+    library,
+    stats,
+    history,
+    ...(folder ? { workspaceRoot: folder.uri.fsPath } : {}),
+  };
   session = current;
 
   // Slash commands are per-session registrations, so an edited library has to
@@ -259,7 +320,10 @@ async function openSession(): Promise<void> {
   refreshTree();
   refreshPanel();
 
-  await startMcp(current, folder);
+  // No folder, no discovery file, nowhere for an agent to look — the global
+  // library is still fully usable from the panel and the sidebar.
+  if (folder) await startMcp(current, folder);
+  else mcpStatus?.set({ kind: 'off' });
 }
 
 /**
@@ -286,8 +350,13 @@ async function startMcp(current: Session, folder: vscode.WorkspaceFolder): Promi
   }
 
   const host = new McpServerHost({
-    workspaceRoot: current.workspaceRoot,
+    workspaceRoot: folder.uri.fsPath,
     libraryRoot: current.library.root.fsPath,
+    // So the bridge serves the same two libraries offline that the editor
+    // shows, including a non-default global path.
+    ...(current.library.roots.global
+      ? { globalLibraryRoot: current.library.roots.global.fsPath }
+      : {}),
     version: extensionVersion(),
     // Read per request, never snapshotted — the library is watched and mutates.
     view: () => ({
@@ -332,15 +401,28 @@ function libraryWriter(library: Library): LibraryWriter {
     // Reload rather than waiting on the watcher: an agent that saves and
     // immediately composes must not read the previous version back.
     await library.reload();
-    log("Saved through MCP", { file: uri.toString() });
+    log('Saved through MCP', { file: uri.toString() });
   };
+
+  /**
+   * An agent may ask for a scope; the workspace is what it gets otherwise.
+   *
+   * Defaulting to global would let one project's agent quietly rewrite the
+   * library every other project sees, which is not a thing to do by omission.
+   * A requested scope that is not available falls back rather than failing —
+   * the tool's job is to save the template, and refusing over where would lose
+   * work the model has already done.
+   */
+  const rootFor = (scope: LibraryScope | undefined): vscode.Uri =>
+    (scope ? library.rootFor(scope) : undefined) ?? library.root;
 
   return {
     parseYaml,
-    saveTemplate: (name, body) =>
-      write(vscode.Uri.joinPath(library.root, TEMPLATES_DIR, name + '.md'), body),
-    saveBlock: (type, instance, body) =>
-      write(vscode.Uri.joinPath(library.root, BLOCKS_DIR, type, instance + '.md'), body),
+    scopes: () => (library.hasBothScopes ? ['workspace', 'global'] : [library.defaultScope]),
+    saveTemplate: (name, body, scope) =>
+      write(vscode.Uri.joinPath(rootFor(scope), TEMPLATES_DIR, name + '.md'), body),
+    saveBlock: (type, instance, body, scope) =>
+      write(vscode.Uri.joinPath(rootFor(scope), BLOCKS_DIR, type, instance + '.md'), body),
   };
 }
 
@@ -380,7 +462,38 @@ async function withSession(run: (session: Session) => Promise<void>): Promise<vo
   }
 }
 
+/**
+ * Which library a new file goes into.
+ *
+ * Only asked when there are two to choose between, and the workspace is listed
+ * first so Enter takes it — a template written with a project open usually
+ * belongs to that project, and one that turns out not to can be promoted in a
+ * single click afterwards. Returns undefined only when the user cancelled.
+ */
+async function askScope(library: Library, what: string): Promise<LibraryScope | undefined> {
+  if (!library.hasBothScopes) return library.defaultScope;
+  const picked = await vscode.window.showQuickPick(
+    [
+      {
+        label: '$(root-folder) This workspace',
+        detail: vscode.workspace.asRelativePath(library.rootFor('workspace')!, false),
+        scope: 'workspace' as LibraryScope,
+      },
+      {
+        label: '$(globe) Global',
+        detail: library.rootFor('global')!.fsPath + ' — available in every workspace',
+        scope: 'global' as LibraryScope,
+      },
+    ],
+    { title: 'Struktek — New ' + what, placeHolder: 'Which library?', ignoreFocusOut: true },
+  );
+  return picked?.scope;
+}
+
 async function newTemplate(library: Library): Promise<void> {
+  const scope = await askScope(library, 'Template');
+  if (!scope) return;
+
   const name = await vscode.window.showInputBox({
     title: 'Struktek — New Template',
     prompt: 'Template name',
@@ -390,13 +503,28 @@ async function newTemplate(library: Library): Promise<void> {
       const trimmed = value.trim();
       if (trimmed.length === 0) return 'Give the template a name.';
       if (!/^[A-Za-z0-9_.\-]+$/.test(trimmed)) return 'Letters, digits, dot, dash and underscore only.';
-      if (library.get(trimmed)) return 'A template called "' + trimmed + '" already exists.';
+      const existing = library.get(trimmed) ?? shadowedNamed(library, trimmed);
+      if (existing?.scope === scope) return 'A template called "' + trimmed + '" already exists.';
+      // A name taken in the OTHER library is allowed — one legitimately
+      // overrides the other. A warning rather than an error, because it is a
+      // real choice the user may be making on purpose, and blocking it would
+      // be refusing the whole point of having two libraries.
+      if (existing) {
+        return {
+          message:
+            scope === 'workspace'
+              ? 'A global template is called "' + trimmed + '" — this one would override it here.'
+              : 'A workspace template is called "' + trimmed + '" — it would override this one here.',
+          severity: vscode.InputBoxValidationSeverity.Warning,
+        };
+      }
       return undefined;
     },
   });
   if (!name) return;
 
-  const uri = vscode.Uri.joinPath(library.root, TEMPLATES_DIR, name.trim() + '.md');
+  const root = library.rootFor(scope) ?? library.root;
+  const uri = vscode.Uri.joinPath(root, TEMPLATES_DIR, name.trim() + '.md');
   await vscode.workspace.fs.writeFile(uri, Buffer.from(newTemplateBody(name.trim()), 'utf8'));
   await library.reload();
   const doc = await vscode.workspace.openTextDocument(uri);
@@ -423,21 +551,34 @@ async function confirmDelete(label: string, detail: string, uri: vscode.Uri): Pr
   log('Deleted a library file', { file: uri.toString() });
 }
 
-async function deleteTemplate(library: Library, node: unknown): Promise<void> {
+async function deleteTemplate(
+  library: Library,
+  node: unknown,
+  scope?: LibraryScope,
+): Promise<void> {
   const name = templateNameOf(node);
-  const entry = name ? library.get(name) : undefined;
+  if (!name) return;
+  const entry = templateEntry(library, name, scope);
   if (!entry) return;
   await confirmDelete(
-    entry.model.name,
+    // Say which library, when the row could have come from either. Deleting
+    // the global copy of a name the workspace also has is a different act from
+    // deleting the one in front of you.
+    scope === 'global' ? name + ' (global)' : name,
     'The file moves to the trash, so you can put it back. Its history and use count stay.',
     entry.uri,
   );
 }
 
-async function deleteBlock(library: Library, node: unknown, instance?: unknown): Promise<void> {
+async function deleteBlock(
+  library: Library,
+  node: unknown,
+  instance?: unknown,
+  scope?: LibraryScope,
+): Promise<void> {
   const target = blockOf(node, instance);
   if (!target) return;
-  const uri = await library.blockUri(target.type, target.instance);
+  const uri = await library.blockUri(target.type, target.instance, scope);
   if (!uri) {
     void vscode.window.showWarningMessage(
       'Struktek: could not locate ' + target.type + '/' + target.instance + '.',
@@ -452,19 +593,107 @@ async function deleteBlock(library: Library, node: unknown, instance?: unknown):
   );
 }
 
-async function deleteBlockType(library: Library, node: unknown): Promise<void> {
+async function deleteBlockType(
+  library: Library,
+  node: unknown,
+  scope?: LibraryScope,
+): Promise<void> {
   const type = blockTypeOf(node);
   if (!type) return;
-  const instances = library.blocks.names.get(type) ?? [];
+  const uri = await library.blockTypeUri(type, scope);
+  if (!uri) {
+    void vscode.window.showWarningMessage('Struktek: could not locate the \"' + type + '\" folder.');
+    return;
+  }
+  // Only the values in the folder being removed. Counting the merged view
+  // would promise to delete values that live in the other library and will
+  // still be there afterwards.
+  const removing = scope ? library.instancesInScope(type, scope) : (library.blocks.names.get(type) ?? []);
+  const survives =
+    scope !== undefined &&
+    library.instancesInScope(type, scope === 'global' ? 'workspace' : 'global').length > 0;
   await confirmDelete(
-    type,
+    scope === 'global' ? type + ' (global)' : type,
     // The count is the whole point of the warning: deleting a type takes every
     // value in it, and every field annotated with it stops resolving.
     'This removes the folder and ' +
-      (instances.length === 1 ? 'its 1 value' : 'all ' + String(instances.length) + ' of its values') +
-      '. Any field typed \"' + type + '\" will report an unknown type until you recreate it.',
-    vscode.Uri.joinPath(library.root, BLOCKS_DIR, type),
+      (removing.length === 1 ? 'its 1 value' : 'all ' + String(removing.length) + ' of its values') +
+      '. ' +
+      (survives
+        ? 'The other library still defines \"' + type + '\", so the type itself stays valid.'
+        : 'Any field typed \"' + type + '\" will report an unknown type until you recreate it.'),
+    uri,
   );
+}
+
+/**
+ * Promote to global, or demote to workspace-only.
+ *
+ * One pair of commands for templates, block values and whole block types,
+ * because the choice the user is making is the same one in all three cases and
+ * a menu with six entries would say otherwise. The palette hands nothing in and
+ * gets a picker; the sidebar hands in what its row is about.
+ */
+async function changeScope(
+  library: Library,
+  to: LibraryScope,
+  target: unknown,
+  second: unknown,
+): Promise<void> {
+  const resolved = scopeTargetOf(target, second) ?? (await pickScopeTarget(library, to));
+  if (!resolved) return;
+  await moveToScope(library, resolved, to);
+  refreshTree();
+  refreshPanel();
+}
+
+/** A template of this name that exists but is currently overridden. */
+function shadowedNamed(library: Library, name: string): { readonly scope: LibraryScope } | undefined {
+  return library.shadowedTemplates().find((entry) => entry.model.name === name);
+}
+
+/** A scope argument that arrived over the webview wire, validated. */
+function scopeOf(value: unknown): LibraryScope | undefined {
+  return value === 'workspace' || value === 'global' ? value : undefined;
+}
+
+/**
+ * A template by name, optionally pinned to one library.
+ *
+ * Without a scope this is `library.get()` — the copy that resolves. With one it
+ * may be a shadowed copy, which `get()` deliberately never returns and which a
+ * row in the sidebar can nonetheless be pointing at.
+ */
+function templateEntry(
+  library: Library,
+  name: string,
+  scope: LibraryScope | undefined,
+): { readonly uri: vscode.Uri } | undefined {
+  const resolved = library.get(name);
+  if (!scope) return resolved;
+  if (resolved?.scope === scope) return resolved;
+  return library.shadowedTemplates().find((entry) => entry.model.name === name && entry.scope === scope);
+}
+
+/** The argument shapes the sidebar, a menu and a keybinding can each produce. */
+function scopeTargetOf(target: unknown, second: unknown): ScopeTarget | undefined {
+  if (typeof target === 'string') {
+    // Two loose strings is the block form the sidebar already uses for delete.
+    return typeof second === 'string'
+      ? { kind: 'block', blockType: target, instance: second }
+      : { kind: 'template', name: target };
+  }
+  const node = target as { kind?: unknown; name?: unknown; blockType?: unknown; instance?: unknown };
+  if (node?.kind === 'template' && typeof node.name === 'string') {
+    return { kind: 'template', name: node.name };
+  }
+  if (node?.kind === 'block' && typeof node.blockType === 'string' && typeof node.instance === 'string') {
+    return { kind: 'block', blockType: node.blockType, instance: node.instance };
+  }
+  if (node?.kind === 'blockType' && typeof node.blockType === 'string') {
+    return { kind: 'blockType', blockType: node.blockType };
+  }
+  return undefined;
 }
 
 /**
@@ -521,15 +750,22 @@ async function newBlock(library: Library, preselected?: string): Promise<void> {
     if (!type) return;
   }
 
+  const scope = await askScope(library, 'Block');
+  if (!scope) return;
+
   const instance = await askName(
     library,
     'Value name',
     'markdown-table',
-    library.blocks.names.get(type) ?? [],
+    // Only the names this library already uses. A value of the same name in
+    // the other one is an override, which blocks work by the same rules
+    // templates do.
+    library.instancesInScope(type, scope),
   );
   if (!instance) return;
 
-  const uri = vscode.Uri.joinPath(library.root, BLOCKS_DIR, type, instance + '.md');
+  const root = library.rootFor(scope) ?? library.root;
+  const uri = vscode.Uri.joinPath(root, BLOCKS_DIR, type, instance + '.md');
   await vscode.workspace.fs.writeFile(uri, Buffer.from(newBlockBody(type, instance), 'utf8'));
   await library.reload();
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));

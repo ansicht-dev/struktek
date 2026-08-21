@@ -19,7 +19,13 @@
 
 import * as vscode from 'vscode';
 import { parse as parseYaml } from 'yaml';
-import { loadTemplate, PRIMITIVE_TYPES, type Node, type TemplateModel } from '../core';
+import {
+  loadTemplate,
+  PRIMITIVE_TYPES,
+  type LibraryScope,
+  type Node,
+  type TemplateModel,
+} from '../core';
 import { completionContext } from '../shared/completion';
 import { TEMPLATES_DIR, type Library } from './library';
 
@@ -38,20 +44,42 @@ const SELECTOR: vscode.DocumentSelector = [
   { scheme: 'file', language: 'plaintext' },
 ];
 
+/**
+ * Which library's `templates/` folder this file is in, if either.
+ *
+ * A path prefix rather than a lookup by name: the file may be unsaved, newly
+ * created, or shadowed, and none of those are in the loaded library yet.
+ */
+function scopeOfDocument(library: Library, uri: vscode.Uri): LibraryScope | undefined {
+  for (const scope of ['workspace', 'global'] as const) {
+    const root = library.rootFor(scope);
+    if (!root) continue;
+    if (uri.path.startsWith(vscode.Uri.joinPath(root, TEMPLATES_DIR).path + '/')) return scope;
+  }
+  return undefined;
+}
+
 export function registerTemplateEditor(getLibrary: () => Library | undefined): vscode.Disposable {
   const diagnostics = vscode.languages.createDiagnosticCollection('struktek');
 
-  /** Parse the buffer, or return undefined when this is not a template. */
+  /**
+   * Parse the buffer, or return undefined when this is not a template.
+   *
+   * Both libraries count. A template promoted to global is the same file it
+   * was a moment ago, and losing its squiggles and completions on the way
+   * would make the move feel like a downgrade.
+   */
   const templateOf = (document: vscode.TextDocument): TemplateModel | undefined => {
     const library = getLibrary();
     if (!library) return undefined;
-    const templates = vscode.Uri.joinPath(library.root, TEMPLATES_DIR).path;
-    if (!document.uri.path.startsWith(templates + '/')) return undefined;
+    const scope = scopeOfDocument(library, document.uri);
+    if (!scope) return undefined;
     try {
       return loadTemplate(document.getText(), {
         name: stem(document.uri.path),
         parseYaml,
         blockTypes: library.blocks.names,
+        scope,
       });
     } catch {
       // A YAML header mid-edit is routinely unparseable; that is not worth a
