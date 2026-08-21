@@ -159,6 +159,12 @@ function buildLevel(label: string, items: readonly MenuItem[], depth: number): M
       // submenu you rest on and closes the one you left, after a beat so that
       // crossing a row on the way somewhere else does not flash a menu open.
       button.addEventListener('mouseenter', () => {
+        // Focus follows the pointer, which is what keeps the menu to ONE lit
+        // row. A menu opens with the ticked item focused; without this, resting
+        // the pointer anywhere else lit that row as well and the menu appeared
+        // to have two cursors. It also means the keyboard picks up wherever
+        // the mouse left off, rather than back where it started.
+        button.focus();
         if (submenuTimer) clearTimeout(submenuTimer);
         submenuTimer = setTimeout(() => {
           if (item.kind === 'submenu') openSubmenu(button, item, depth);

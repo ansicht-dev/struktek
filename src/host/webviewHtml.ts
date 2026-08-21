@@ -225,7 +225,11 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
  */
 .stk-menu {
   position: fixed; z-index: 20;
-  min-width: 160px; max-width: calc(100vw - 8px);
+  /* 200px, not the workbench's 160: its menus are mostly one word, and ours
+     carry a tick column, a label and a chevron on the same row. Capped at the
+     frame's own width, because a min-width WINS against a smaller max-width -
+     stated flat, it would overhang a sidebar dragged narrower than the menu. */
+  min-width: min(200px, calc(100vw - 8px)); max-width: calc(100vw - 8px);
   max-height: 60vh; overflow-y: auto;
   padding: 4px 0;
   font-size: 13px;
@@ -259,29 +263,50 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
   background: transparent; color: inherit;
   text-align: left; cursor: pointer;
 }
-/* Hover and keyboard focus are the SAME state in a menu - there is no separate
-   selected row, and a menu with two highlights would read as two cursors. */
+/*
+ * Hover and keyboard focus are the SAME state in a menu - there is no separate
+ * selected row, and a menu with two highlights reads as two cursors.
+ *
+ * Saying so in the stylesheet is not enough to make it true: opening a menu
+ * puts focus on the ticked row, and if the pointer is resting somewhere else
+ * that second row lights up too. So the POINTER MOVES FOCUS, in menu.ts, and
+ * these selectors then describe one row rather than two.
+ *
+ * A submenu's parent is the exception, and deliberately: it stays lit while
+ * its child is open, which reads as the trail you came down rather than as a
+ * second cursor.
+ */
 .stk-menu-item:hover,
 .stk-menu-item:focus,
-.stk-menu-item:focus-visible {
+.stk-menu-item:focus-visible,
+.stk-menu-item[aria-expanded="true"] {
   outline: none;
   background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
   color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
 }
-/* Absolute, sitting inside the label's own left padding rather than taking a
-   column of its own - the workbench's arrangement, and the reason its labels
-   sit where they do whether ticked or not. */
+/*
+ * The tick column: a fixed 22px, absolutely placed, with the label indented
+ * past it by exactly the same amount.
+ *
+ * It was 1em wide, holding a codicon that is 16px whatever the font is - so
+ * the tick overflowed its column and sat on the first letter of the label,
+ * which was 1em (12px) from the left edge. Two lengths in two different fonts
+ * were being asked to agree; the fix is to state the column in pixels once and
+ * measure the label from it.
+ */
 .stk-menu-check {
-  position: absolute; left: 0; width: 1em; height: 100%;
+  position: absolute; left: 0; top: 0; width: 22px; height: 100%;
   display: flex; align-items: center; justify-content: center;
 }
+.stk-menu-check .codicon { font-size: 14px; }
 .stk-menu-label {
-  flex: 1 1 auto; padding: 0 1em; font-size: 12px; line-height: 1;
+  flex: 1 1 auto; padding: 0 8px 0 22px; font-size: 12px; line-height: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Dimmed like the workbench's own submenu chevron: it is an affordance, not a
    thing to read. */
-.stk-menu-more { flex: 0 0 auto; margin-left: auto; padding-right: 6px; opacity: .7; }
+.stk-menu-more { flex: 0 0 auto; margin-left: auto; padding-right: 6px; opacity: .8; }
+.stk-menu-more.codicon { font-size: 14px; }
 /* Greyed but still readable, and never highlighted - a section with nothing in
    it says so rather than vanishing, which would leave you wondering whether
    you had missed it. */
