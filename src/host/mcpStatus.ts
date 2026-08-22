@@ -120,9 +120,19 @@ export class McpStatus implements vscode.Disposable {
       return;
     }
 
+    // `server`, the glyph the workbench uses for a thing that is listening -
+    // and the one the sibling extension puts on its own MCP indicator, so two
+    // of them in one status bar read as the same kind of thing. The plug stays
+    // on the ACTION below, where plugging an agent in is what it means.
+    //
+    // The label stays "Struktek" rather than "MCP": the neighbour's says MCP,
+    // and two items both reading MCP would be two of the same word and no way
+    // to tell which server is which.
+    //
     // The count is the answer to "is my agent actually attached", so it earns
     // a place in the label rather than only in the hover.
-    this.item.text = state.agents > 0 ? '$(plug) Struktek ' + String(state.agents) : '$(plug) Struktek';
+    this.item.text =
+      state.agents > 0 ? '$(server) Struktek ' + String(state.agents) : '$(server) Struktek';
     this.item.backgroundColor = undefined;
     this.item.tooltip = tooltip([
       '**Struktek MCP**',

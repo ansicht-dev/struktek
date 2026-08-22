@@ -268,7 +268,7 @@ checking before writing a prompt from scratch, that a block type is shared
 vocabulary, and that composing reports what it left unfilled. Tool descriptions
 are read after deciding to look; instructions arrive before.
 
-A plug in the status bar says whether the server is up and how many agents are
+A server icon in the status bar says whether the server is up and how many agents are
 attached; it turns amber if the server could not start, which is the one
 failure you would otherwise only find in the output channel. Click it to
 configure an agent, copy the URL, read the log, or restart. Nothing appears
