@@ -29,6 +29,11 @@ cliff.toml
 .gitattributes
 SECURITY.md
 
+# A developer's own agent config, pointing at absolute paths on their machine.
+# It is untracked, and `vsce ls` is the only thing that would ever have told
+# you it was riding along inside the .vsix.
+.mcp.json
+
 # Source maps are the easiest path back to readable source — never ship them.
 out/**/*.map
 **/*.map

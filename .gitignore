@@ -6,6 +6,9 @@ coverage/
 .vscode-test/
 .vscode/settings.json
 
+# A developer's own agent config: absolute paths, one machine.
+.mcp.json
+
 # Per-session MCP runtime state — carries a bearer token, never commit.
 # NOTE: only `.runtime/` is ignored. `.struktek/templates/` and `.struktek/blocks/`
 # are the product's content and MUST stay tracked.
