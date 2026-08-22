@@ -380,6 +380,15 @@ input[type="number"]::-webkit-outer-spin-button {
   flex: 1 1 auto; padding: 0 8px 0 22px; font-size: 12px; line-height: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* What the submenu resolves to, in the place and the weight the workbench
+   gives a keybinding hint: read it if you are looking for it, skip it if you
+   are not. */
+.stk-menu-detail {
+  flex: 0 0 auto; margin-left: auto; padding-right: 8px;
+  font-size: 12px; opacity: .7;
+}
+/* With a note beside it the chevron no longer claims the free space. */
+.stk-menu-detail ~ .stk-menu-more { margin-left: 0; }
 /* Dimmed like the workbench's own submenu chevron: it is an affordance, not a
    thing to read. */
 .stk-menu-more { flex: 0 0 auto; margin-left: auto; padding-right: 6px; opacity: .8; }

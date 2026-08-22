@@ -40,6 +40,16 @@ export interface MenuItem {
    */
   readonly kind: 'radio' | 'checkbox' | 'action' | 'submenu';
   readonly checked?: boolean;
+  /**
+   * A dim note at the end of the row, before any chevron.
+   *
+   * What a submenu currently resolves to, said on the row that opens it. A
+   * tick would be the obvious way to say it and is the wrong one: the
+   * workbench ticks leaves, never the row that leads to them, so a ticked
+   * parent reads as a selection competing with the real one inside it.
+   * Trailing dim text is where a menu already puts a keybinding.
+   */
+  readonly detail?: string;
   readonly title?: string;
   readonly separatorBefore?: boolean;
   /** Greyed and unusable - an empty section says so rather than vanishing. */
@@ -132,6 +142,7 @@ function buildLevel(label: string, items: readonly MenuItem[], depth: number): M
         // somewhere inside, which is what saves you opening all three.
         item.checked ? icon('check', 'stk-menu-check') : el('span', { class: 'stk-menu-check' }),
         el('span', { class: 'stk-menu-label', text: item.label }),
+        ...(item.detail ? [el('span', { class: 'stk-menu-detail', text: item.detail })] : []),
         ...(item.kind === 'submenu' ? [icon('chevron-right', 'stk-menu-more')] : []),
       ],
     );

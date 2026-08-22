@@ -72,9 +72,9 @@ function filterMenuItems(button: HTMLElement, options: FilterOptions): MenuItem[
   const items: MenuItem[] = sections.map((section) => ({
     label: section.label,
     kind: 'submenu',
-    // Ticked when something inside is, so you can see a filter is on without
-    // opening the submenu to look.
-    checked: section.active.size > 0,
+    // How many of this section are on, so you can see a filter is there
+    // without opening the submenu to look.
+    ...(section.active.size > 0 ? { detail: String(section.active.size) } : {}),
     items:
       section.values.length === 0
         ? [{ label: section.empty, kind: 'action', disabled: true }]
@@ -148,9 +148,10 @@ export function sortLabel(specs: readonly SortSpec[], order: SortOrder): string 
  * The sort menu: one submenu per field, two directions inside each.
  *
  * Splitting the direction out is what keeps the top level to three short words
- * you can aim at. The field carries a tick when the current order is one of
- * its two, so the answer to "how is this sorted" is visible without opening
- * anything.
+ * you can aim at. The field the list is currently ordered by carries the name
+ * of that order beside it, so "how is this sorted" is answered without opening
+ * anything - and the tick stays where the workbench puts one, on the leaf you
+ * actually chose.
  */
 export function sortButton(
   specs: readonly SortSpec[],
@@ -180,7 +181,9 @@ export function sortButton(
       specs.map((spec): MenuItem => ({
         label: spec.label,
         kind: 'submenu',
-        checked: order.field === spec.field,
+        // The field the list is ordered by names the direction it is ordered
+        // in. The others say nothing, so one row answers the question.
+        ...(order.field === spec.field ? { detail: sortLabel(specs, order) } : {}),
         items: spec.directions.map((option): MenuItem => ({
           label: option.label,
           kind: 'radio',
