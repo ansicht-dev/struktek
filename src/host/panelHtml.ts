@@ -30,7 +30,7 @@ const STYLES = `
 /* ── navigation ─────────────────────────────────────────── */
 .stk-nav {
   display: flex; gap: 2px; margin-bottom: 18px;
-  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border-bottom: 1px solid var(--stk-border);
 }
 .stk-nav-item {
   background: transparent; color: var(--vscode-descriptionForeground);
@@ -108,7 +108,7 @@ const STYLES = `
   /* A hair-line rule centred in a grabbable strip: the target is wide enough
      to hit, the line is thin enough not to read as a border. */
   background:
-    linear-gradient(to right, transparent 5px, var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)) 5px 6px, transparent 6px);
+    linear-gradient(to right, transparent 5px, var(--stk-border) 5px 6px, transparent 6px);
 }
 .stk-divider:hover, .stk-divider:active {
   background:
@@ -146,14 +146,14 @@ const STYLES = `
 .stk-pane {
   display: flex; flex-direction: column;
   border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border: 1px solid var(--stk-border);
   background: var(--vscode-textCodeBlock-background, var(--vscode-editorWidget-background));
 }
 .stk-pane-head {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 12px; font-size: .85em;
   color: var(--vscode-descriptionForeground);
-  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border-bottom: 1px solid var(--stk-border);
 }
 .stk-preview {
   flex: 1 1 auto;
@@ -164,7 +164,7 @@ const STYLES = `
   min-height: 220px; max-height: 62vh; overflow: auto;
 }
 .stk-empty-slot { color: var(--vscode-descriptionForeground); font-style: italic; }
-.stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)); }
+.stk-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 11px 12px; border-top: 1px solid var(--stk-border); }
 
 /* ── history feed ───────────────────────────────────────── */
 .stk-feed { display: flex; flex-direction: column; gap: 10px; }
@@ -172,7 +172,7 @@ const STYLES = `
   display: flex; flex-direction: column; gap: 9px;
   padding: 12px 14px; border-radius: 6px;
   background: var(--vscode-editorWidget-background);
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border: 1px solid var(--stk-border);
 }
 .stk-run-top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
 .stk-run-name { font-weight: 600; }
@@ -195,8 +195,11 @@ const STYLES = `
 .stk-excerpt {
   margin: 0;
   padding: 10px 12px; border-radius: 4px;
+  /* A theme is free to give textCodeBlock.background the same value as the
+     card's own background - so the excerpt takes the hairline too, and reads
+     as a block whether or not the two colours differ. */
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
-  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border: 1px solid var(--stk-border);
   color: var(--vscode-foreground);
   font-family: var(--vscode-editor-font-family); font-size: .88em; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
@@ -233,7 +236,7 @@ const STYLES = `
   border-radius: 8px;
   background: var(--vscode-editorWidget-background);
   color: var(--vscode-foreground);
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border: 1px solid var(--stk-border);
   box-shadow: 0 8px 30px var(--vscode-widget-shadow, transparent);
 }
 .stk-dialog[open] { display: flex; flex-direction: column; }
@@ -270,8 +273,8 @@ const STYLES = `
      at all, and a floor would leave dead space under a one-line prompt. */
   padding: 14px; min-height: 0;
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
-  border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
-  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border-top: 1px solid var(--stk-border);
+  border-bottom: 1px solid var(--stk-border);
   font-family: var(--vscode-editor-font-family);
   font-size: var(--vscode-editor-font-size, .92em);
   line-height: 1.55; white-space: pre-wrap; word-break: break-word;

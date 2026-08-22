@@ -136,6 +136,24 @@ body {
   mask: var(--stk-clear-icon) center / contain no-repeat;
 }
 :root {
+  /*
+   * THE HAIRLINE, once.
+   *
+   * Every edge in both frames used editorWidget.border directly, falling
+   * through to contrastBorder and then to transparent - and a theme that
+   * leaves editorWidget.border unset is not unusual, it is common. Catppuccin
+   * does; so does more than half of what people actually run. Every card, pane
+   * and dialog edge then resolved to nothing, and the surfaces they were
+   * drawing had to carry the whole job on their own.
+   *
+   * So the chain walks on to panel.border, which is the hairline the workbench
+   * draws between its own areas and which themes do define, before giving up.
+   * One variable, so an edge cannot be spelled differently in two places.
+   */
+  --stk-border: var(--vscode-editorWidget-border,
+    var(--vscode-panel-border,
+      var(--vscode-contrastBorder, transparent)));
+
   /* Inline SVG so no network request is needed under the CSP. */
   --stk-clear-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8M12 4l-8 8' stroke='%23000' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
 }
@@ -305,10 +323,7 @@ input[type="number"]::-webkit-outer-spin-button {
    * the fallback walks on to borders every theme does define rather than
    * giving up at transparent.
    */
-  border: 1px solid var(--vscode-menu-border,
-    var(--vscode-editorWidget-border,
-      var(--vscode-widget-border,
-        var(--vscode-contrastBorder, transparent))));
+  border: 1px solid var(--vscode-menu-border, var(--stk-border));
   box-shadow: var(--vscode-shadow-lg, 0 2px 8px var(--vscode-widget-shadow, transparent));
   /* The workbench's own easing and duration, so a menu opening here and a menu
      opening in the editor do not arrive at different speeds. */
@@ -381,42 +396,36 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* ── shared idioms ─────────────────────── */
 /*
- * A chip is a LABEL, not a badge.
+ * A chip is a small label, drawn the way the workbench draws one.
  *
- * It used to be drawn in the badge colours, which are a theme's attention
- * pair — a saturated fill meant to carry a number you must not miss. On a
- * history card, where every row carries the template it came from and each
- * block it drew on, that painted the quietest information on the card in the
- * loudest colour the theme owns, and in several themes it landed as white on
- * something bright enough to make the text hard to read at all.
+ * It carries the badge pair - the tokens a theme picks for a short label that
+ * has to be legible wherever it lands. The alternative, and what this was for
+ * a while, is to build the chip out of the widget background it happens to sit
+ * on: that reads fine against the theme you developed against and vanishes in
+ * the next one. Catppuccin, for instance, gives editorWidget.background and
+ * textCodeBlock.background the same value and leaves editorWidget.border
+ * unset, so a chip made of those was the card's own colour with no edge - an
+ * invisible chip on a card full of them.
  *
- * So chips are outlined instead: the card's own text colour, dimmed, inside a
- * hairline. Contrast then comes from the foreground token, which every theme
- * guarantees against its background, rather than from a fill pairing nobody
- * checked. The badge colours are still right for a count, and the section
- * counts in the sidebar still use them.
+ * Badge cannot collide that way: the pair is defined together and is meant to
+ * sit on top of something.
  *
- * Nearly square, too. A pill reads as something you can pick up and take off,
- * which is what a filter chip is; these name a file the prompt was built from,
- * so they take the corner radius of the code they refer to.
+ * Nearly square, though. A pill reads as something you can pick up and take
+ * off, which is what a filter chip is; these name a file the prompt was built
+ * from, so they take the corner radius of the code they refer to.
  */
 .stk-chip {
   display: inline-block; padding: 0 6px; border-radius: 3px;
   font-size: .82em; line-height: 1.75;
-  background: var(--vscode-editorWidget-background);
-  color: var(--vscode-descriptionForeground);
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   cursor: pointer;
 }
-/* A chip that is a button is still a chip: the base button rules would paint
-   it in the button colours the moment you touched it, and "button:hover" is
-   one class heavier than ".stk-chip", so the quieter treatment has to be
-   spelled out at a weight that beats it. */
-.stk-chip:not(.stk-static):hover {
-  color: var(--vscode-foreground);
-  background: var(--vscode-toolbar-hoverBackground);
-  border-color: var(--vscode-focusBorder);
-}
+/* A chip that is a real button says so on approach, with the accent rather
+   than with a hover background - toolbar.hoverBackground is another token
+   plenty of themes leave unset. */
+.stk-chip:not(.stk-static):hover { border-color: var(--vscode-focusBorder); }
 /* Pressed is a real state, so it takes the workbench's toggle pair — the same
    one the funnel uses when a filter is on. */
 .stk-chip[aria-pressed="true"] {

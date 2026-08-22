@@ -100,7 +100,12 @@ describe.each(FRAMES)('theming — $name', (frame) => {
       ) ?? [];
     const bad = declarations
       .map((d) => d.replace(/^[;{\s]+/, '').trim())
-      .filter((d) => !/var\(--vscode-/.test(d))
+      // `--stk-*` is one of our own - a fallback chain written once instead of
+      // six times. A declaration reaching the theme through one still reaches
+      // the theme, and a literal colour could not hide inside its definition:
+      // the three tests above scan the whole stylesheet, custom properties
+      // included, for every way of writing one.
+      .filter((d) => !/var\(--(vscode|stk)-/.test(d))
       // A declaration may legitimately be a keyword or inherit.
       .filter((d) => !/:\s*(transparent|inherit|currentColor|none|unset|initial)\s*$/i.test(d));
     expect(bad).toEqual([]);

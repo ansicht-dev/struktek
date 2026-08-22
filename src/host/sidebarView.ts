@@ -448,7 +448,7 @@ body { overflow: hidden; }
   padding: 4px 8px; border-radius: 3px;
   background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
   color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
-  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-contrastBorder, transparent));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--stk-border));
   font-size: var(--vscode-font-size); line-height: 1.4;
   pointer-events: none;
 }
