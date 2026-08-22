@@ -10,7 +10,7 @@
   - measured six ways it is not - is that a quatrefoil around an open centre
   reads as an outline at this size, and an outline reads lighter than a solid
   beside it. Weight is the lever that survives; SIZE is not one, because VS
-  Code masks this file at --activity-bar-icon-size (24px) and an extension
+  Code masks this file at the activity-bar-icon-size variable (24px) and an extension
   cannot exceed it.
 
   The dilation is one number. 150 is where it stands; the ladder either side of
