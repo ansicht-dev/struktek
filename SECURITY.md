@@ -4,6 +4,8 @@
 
 Please report security issues privately rather than opening a public issue —
 use [GitHub's private advisory form][advisory], or email security@ansicht.dev.
+The in-editor **Report an Issue** button opens a *public* form, so it is the
+wrong door for a vulnerability.
 
 [advisory]: https://github.com/ansicht-dev/struktek/security/advisories/new
 
@@ -30,6 +32,11 @@ Worth knowing if you are reviewing it:
   receives a composed prompt only when you or it asks for one.
 - **No network calls.** Struktek makes no outbound requests. The bridge is
   fetched from npm by your agent's `npx` invocation, not by the extension.
+- **One outbound link, opened by you.** `Struktek: Report an Issue` hands your
+  browser a `github.com/.../issues/new` URL. It carries the extension version,
+  the editor name and version, and the platform — nothing from your library,
+  your prompts or your workspace. Nothing is sent; a page is opened, and what
+  you type into it is yours to review before submitting.
 
 ## Scope
 
