@@ -317,7 +317,7 @@ MCP bridge, and any future webview all run the same code.
 
 ## Status and licence
 
-Pre-release (`0.2.0`) and shaped by daily use, so expect the format to move
+Pre-release (`0.2.1`) and shaped by daily use, so expect the format to move
 before `1.0`.
 
 The source is public to read, review, and learn from. It is **not** open

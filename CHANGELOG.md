@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-08-22
+
+### Fixed
+
+- **The activity-bar icon did not render.** Its SVG carried a double hyphen
+  inside an XML comment, which XML forbids, so the document never parsed and
+  the activity bar drew an empty slot beside a working tooltip. The assets are
+  now checked in the suite: every SVG that ships has to be well-formed, and
+  every icon path the manifest names has to exist.
+
 ## [0.2.0] - 2026-08-22
 
 ### Added
