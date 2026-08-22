@@ -847,7 +847,9 @@ function fieldControl(detail: TemplateDetail, field: Field, refresh: () => void)
       state.values[field.name] = select.value;
       refresh();
     });
-    control = select;
+    // Wrapped, so the chevron the stylesheet draws has something to sit in -
+    // the platform's own arrows are the one part of a select no theme reaches.
+    control = el('span', { class: 'stk-select' }, [select, icon('chevron-down')]);
     if (type.kind === 'blockType' && options.length === 0) {
       wrap.append(
         el('p', {

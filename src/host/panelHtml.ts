@@ -57,9 +57,8 @@ const STYLES = `
    moved into the funnel's menu, and what is left is a fixed three things. */
 .stk-filters { display: flex; gap: 6px; align-items: stretch; margin-bottom: 14px; }
 .stk-filters input { flex: 1 1 auto; min-width: 0; }
-/* The shared funnel is sized for the sidebar's 22px rows. Here it sits beside
-   a page-sized input, so it grows to match rather than floating in the row. */
-.stk-filters .stk-funnel { width: 28px; border-radius: 4px; }
+/* Square with the search box beside it, and on its own corner radius. */
+.stk-filters .stk-funnel { width: 26px; }
 
 /* ── actions ────────────────────────────────────────────── */
 /* Secondary actions are icon-only with a tooltip, the way workbench toolbars
@@ -127,15 +126,22 @@ const STYLES = `
 .stk-fold > summary::before { content: '\\25b8 '; }
 .stk-fold[open] > summary::before { content: '\\25be '; }
 
-.stk-field { margin-bottom: 13px; }
+/*
+ * A field reads the way a row in the settings editor does: the name, then the
+ * control, then the line explaining it - and the control does not stretch to
+ * whatever width the pane happens to have been dragged to. A text box the
+ * width of a monitor is the other thing that stops a form looking like part of
+ * an editor.
+ */
+.stk-field { margin-bottom: 14px; max-width: 560px; }
 .stk-label { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; }
-.stk-name { font-weight: 600; font-size: .95em; }
+.stk-name { font-weight: 600; }
 .stk-type {
-  font-family: var(--vscode-editor-font-family); font-size: .8em;
+  font-family: var(--vscode-editor-font-family); font-size: .85em;
   color: var(--vscode-descriptionForeground);
 }
-.stk-opt { font-size: .8em; color: var(--vscode-descriptionForeground); font-style: italic; }
-.stk-hint { color: var(--vscode-descriptionForeground); font-size: .86em; margin: 3px 0 0; }
+.stk-opt { font-size: .85em; color: var(--vscode-descriptionForeground); font-style: italic; }
+.stk-hint { color: var(--vscode-descriptionForeground); font-size: .9em; margin: 4px 0 0; }
 
 .stk-pane {
   display: flex; flex-direction: column;

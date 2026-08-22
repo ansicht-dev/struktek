@@ -145,8 +145,9 @@ button {
   font-family: inherit; font-size: inherit;
   /* transparent normally, a real outline under high contrast. */
   border: 1px solid var(--vscode-contrastBorder, transparent);
-  border-radius: 4px;
-  padding: 5px 12px; cursor: pointer;
+  /* 2px, like the workbench's own button and every field beside it. */
+  border-radius: 2px;
+  padding: 4px 12px; cursor: pointer;
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
 }
 button:hover { background: var(--vscode-button-hoverBackground); }
@@ -165,31 +166,75 @@ button.stk-ghost:hover {
 }
 button:disabled { opacity: .5; cursor: default; }
 
-input, textarea {
+/*
+ * Fields are the workbench's, not a web form's.
+ *
+ * The numbers are the ones VS Code's own input box and select box use, and
+ * they are what the difference is actually made of - a 4px radius with 5px/8px
+ * padding is a page control, and no amount of correct colour tokens makes it
+ * read as an editor one. 26px tall, a 2px corner, 6px of side padding, the
+ * workbench font at its own size.
+ *
+ * The border is "input.border", which many themes leave unset ON PURPOSE: the
+ * background alone separates the field from the pane, and drawing an edge
+ * those themes did not ask for is the other half of looking bolted on. It
+ * falls through to contrastBorder so high contrast still gets its outline.
+ */
+input, textarea, select {
   font-family: inherit; font-size: inherit; width: 100%;
-  padding: 5px 8px; border-radius: 4px;
+  padding: 3px 6px; border-radius: 2px;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder, transparent));
 }
+input, select { height: 26px; }
+textarea { resize: vertical; min-height: 60px; padding: 5px 6px; line-height: 1.4; }
 /* A select is NOT an input: VS Code themes them from separate tokens, and the
    popup list is drawn by the browser from the element's own colours. */
 select {
-  font-family: inherit; font-size: inherit; width: 100%;
-  padding: 5px 8px; border-radius: 4px;
   color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
   background: var(--vscode-dropdown-background, var(--vscode-input-background));
-  border: 1px solid var(--vscode-dropdown-border, var(--vscode-contrastBorder, transparent));
+  border-color: var(--vscode-dropdown-border, var(--vscode-input-border, var(--vscode-contrastBorder, transparent)));
+  cursor: pointer;
 }
 /* The one that bites: unstyled options render white-on-white in dark themes. */
 option {
   color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
   background: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background, var(--vscode-input-background)));
 }
+/* Focus is an INSET outline, not a border swap: the field must not change size
+   when you tab into it, and this is the rule the workbench uses. */
 input:focus, select:focus, textarea:focus {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px;
 }
-textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
+
+/*
+ * A select box, drawn the way the workbench draws one.
+ *
+ * Left alone, a select is painted by the platform: on Windows a pair of small
+ * black arrows in a lighter well, on macOS a rounded blue-grey button. Neither
+ * follows the theme, and it is the single loudest thing in a form that is
+ * otherwise the editor's own colours. VS Code has the same problem and solves
+ * it the same way - drop the native appearance and draw a codicon chevron over
+ * the element, which is why its dropdowns match its trees.
+ *
+ * The chevron is inert to the pointer, so the whole control including the
+ * glyph opens the list.
+ */
+.stk-select { position: relative; display: block; }
+.stk-select select { appearance: none; -webkit-appearance: none; padding-right: 22px; }
+.stk-select .codicon {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  pointer-events: none; font-size: 14px;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+}
+/* The spinner is a platform widget too, and a number field in the workbench
+   does not have one - you type the number. */
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none; appearance: none; margin: 0;
+}
 
 /* An icon is a fixed glyph, never a thing for a flex row to squeeze. */
 .codicon { flex: 0 0 auto; }

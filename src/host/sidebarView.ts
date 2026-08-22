@@ -291,8 +291,9 @@ body { overflow: hidden; }
 
 /* ── search row ─────────────────────────────────────────── */
 .stk-search { display: flex; gap: 4px; padding: 6px 8px; flex: 0 0 auto; }
-/* VS Code inputs are 2px-radius and tighter than the panel's form fields. */
-.stk-search input { flex: 1 1 auto; width: auto; min-width: 0; padding: 3px 5px; border-radius: 2px; }
+/* Only the flex behaviour is the search row's own now - the metrics moved into
+   the base stylesheet, where every field in both frames takes them. */
+.stk-search input { flex: 1 1 auto; width: auto; min-width: 0; height: 24px; }
 
 /* ── pane headers ───────────────────────────────────────── */
 .stk-body { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
