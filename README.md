@@ -151,8 +151,8 @@ descriptions, notes and tags. Two buttons sit beside it, each opening a menu
 with submenus — menus rather than panels that unfold, so choosing never moves
 the list underneath you.
 
-**Filter** holds one section per dimension. Today that is Tags; tick as many as
-you like and the funnel fills in while a filter is on.
+**Filter** holds one section per dimension. In the sidebar that is Tags; tick
+as many as you like and the funnel fills in while a filter is on.
 
 **Sort** holds one submenu per field, each with both directions:
 
@@ -161,6 +161,9 @@ you like and the funnel fills in while a filter is on.
 | Relevance | Most used · Least used |
 | Name | Alphabetical · Reverse alphabetical |
 | Date | Newest · Oldest |
+
+The field the list is currently ordered by carries the name of that order
+beside it, so how a list is sorted is readable without opening anything.
 
 Most used is the default and counts prompts composed from a template *in this
 workspace*. You will not find that number anywhere in the UI, and that is on
@@ -171,9 +174,16 @@ count, so they stay alphabetical whichever sort is chosen.
 Overridden rows sort last under every option — a struck-through row should
 never sit above one you can actually compose.
 
+The history screen has the same row over prompts instead of templates: Filter
+holds Templates and Tags, and Sort holds Date and Template. Ordered by
+template, the runs inside one name stay newest-first — the name is the key you
+chose, and recency is still what you want to read first inside it.
+
 ## The panel
 
-`Struktek: Open Panel` has two screens.
+`Struktek: Open Panel` opens *beside* what you are looking at rather than as
+another tab on top of it — the panel is something you compose **from**, so the
+one thing it must not do is hide the file you opened it for. Two screens.
 
 **Compose** is the fields on the left and the prompt as it will be sent on the
 right, split by a divider you can drag - how much room a form needs depends on
@@ -181,11 +191,21 @@ the template, and how much a preview needs depends on the prompt. Optional
 fields fold away so a template reads as long as it actually is. The template
 name is also the switcher.
 
-**History** is every prompt you have composed, newest first, searchable by what
-the prompt said and filterable by template and tag. Each one shows which
-template and which blocks produced it, and offers Copy and Create variant -
-which reopens the composer with the values that run actually used. Runs are
-kept in `.struktek/.runtime/history.jsonl`, which is git-ignored.
+**History** is every prompt you have composed, newest first. The search box
+matches the prompt text, the template, its tags and the values behind it, and
+the funnel and sort button beside it work as they do in the sidebar.
+
+Click a run to open it in full: the whole prompt, scrolling on its own, the
+value each field was filled with, and every action the card carries. What it
+was made *from* is a set of links — the template opens in the composer, a block
+opens its file — which is the one thing a prompt cannot tell you by reading it.
+
+Copy takes the text. Create variant reopens the composer with the values that
+run actually used. The bin removes that one run, and asks nothing: it is a line
+in a log and it is in front of you when you press it, where clearing a
+template's history or all of it throws away runs you cannot see and still asks
+first. Runs are kept in `.struktek/.runtime/history.jsonl`, which is
+git-ignored.
 
 There is no library screen: the sidebar is the library, and a second grid of
 the same templates was one surface too many.
@@ -222,6 +242,7 @@ points.
 | `Struktek: Make Workspace-Only` | move it back into this project |
 | `Struktek: Reveal Global Library` | open `~/.struktek` in your file manager |
 | `Struktek: Configure MCP for Agent` | wire your templates into Claude Code or Codex |
+| `Struktek: Report an Issue` | open a bug report or a feature request, prefilled |
 
 Composing ends with a choice of **Send to Chat** (prefills the chat box without
 submitting), **Copy to Clipboard**, **Insert at Cursor**, or **Open in Editor**.
@@ -229,7 +250,7 @@ submitting), **Copy to Clipboard**, **Insert at Cursor**, or **Open in Editor**.
 ## Agents
 
 Run `Struktek: Configure MCP for Agent` and your templates become available to
-your agent two ways at once:
+your agent three ways at once:
 
 - **As slash commands** — `/mcp__struktek__code-review`, with each field an
   argument. This is MCP's `prompts` primitive, which a template maps onto exactly.
@@ -237,6 +258,15 @@ your agent two ways at once:
   can pick a template itself. Necessary because MCP prompts are invisible to the
   model: you can invoke one, but the agent cannot see it to choose. This is what
   lets an agent compose a good prompt for its own subagents.
+- **As resources** — `struktek://template/{name}` and
+  `struktek://block/{type}/{instance}`, returning a file as written. Listing a
+  template reports its fields; reading the resource is the only way to see its
+  *wording*, which is what an agent needs before it edits one.
+
+On connect the server also sends instructions — that there is a library worth
+checking before writing a prompt from scratch, that a block type is shared
+vocabulary, and that composing reports what it left unfilled. Tool descriptions
+are read after deciding to look; instructions arrive before.
 
 A plug in the status bar says whether the server is up and how many agents are
 attached; it turns amber if the server could not start, which is the one
@@ -295,7 +325,10 @@ source: struktek is proprietary, all rights reserved — see
 [LICENSE.txt](LICENSE.txt). Your templates and blocks are entirely yours; the
 licence claims nothing over anything you author with it.
 
-Bug reports and ideas are welcome in [issues][issues]. Security issues should
-go through [SECURITY.md](SECURITY.md) rather than a public issue.
+Bug reports and ideas are welcome in [issues][issues] — or from the sidebar's
+title bar, which asks whether you are reporting a bug or requesting a feature
+and opens that form with the version, editor and platform already filled in.
+Security issues should go through [SECURITY.md](SECURITY.md) rather than a
+public issue.
 
 [issues]: https://github.com/ansicht-dev/struktek/issues
