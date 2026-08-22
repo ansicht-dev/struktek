@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2026-08-22
+
+### Changed
+
+- **The status bar wears the server glyph.** `$(server)` is what the workbench
+  puts on a thing that is listening. The plug keeps the "Configure MCP for
+  Agent" action, where plugging an agent in is what it means.
+
 ## [0.2.2] - 2026-08-22
 
 ### Fixed
