@@ -1,24 +1,5 @@
-<svg width="24" height="24" viewBox="-75 -75 882 882" fill="none" xmlns="http://www.w3.org/2000/svg">
-<!--
-  The mark, drawn FOR 24 pixels rather than scaled down to them.
-
-  The same outline as assets/struktek.svg, dilated by a 150-unit round stroke in
-  its own fill, with the viewBox opened by exactly that much so the silhouette
-  still touches all four edges. Fat arms, and a centre hole reduced to a dot.
-
-  Why heavier at all, when the mark is not actually smaller than its neighbours
-  - measured six ways it is not - is that a quatrefoil around an open centre
-  reads as an outline at this size, and an outline reads lighter than a solid
-  beside it. Weight is the lever that survives; SIZE is not one, because VS
-  Code masks this file at the activity-bar-icon-size variable (24px) and an extension
-  cannot exceed it.
-
-  The dilation is one number. 150 is where it stands; the ladder either side of
-  it is 50 (hole clearly open) through 200 (nearly solid).
-
-  Masked, so the fill colour is never painted here - only the alpha is read.
-  #C5C5C5 matters for the panel's tab icon alone, the one place this file is
-  rendered as-is.
--->
-<path fill-rule="evenodd" clip-rule="evenodd" d="M366 244C298.621 244 244 189.379 244 122C244 54.6213 298.621 0 366 0C433.379 0 488 54.6213 488 122C488 189.379 542.621 244 610 244C677.379 244 732 298.621 732 366C732 433.379 677.379 488 610 488C542.621 488 488 542.621 488 610C488 677.379 433.379 732 366 732C298.621 732 244 677.379 244 610C244 542.621 189.379 488 122 488C54.6213 488 0 433.379 0 366C0 298.621 54.6213 244 122 244C189.379 244 244 298.621 244 366C244 433.379 298.621 488 366 488C433.379 488 488 433.379 488 366C488 298.621 433.379 244 366 244Z" fill="#C5C5C5" stroke="#C5C5C5" stroke-width="150" stroke-linejoin="round"/>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(2 2) scale(0.02732)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M366 244C298.621 244 244 189.379 244 122C244 54.6213 298.621 0 366 0C433.379 0 488 54.6213 488 122C488 189.379 542.621 244 610 244C677.379 244 732 298.621 732 366C732 433.379 677.379 488 610 488C542.621 488 488 542.621 488 610C488 677.379 433.379 732 366 732C298.621 732 244 677.379 244 610C244 542.621 189.379 488 122 488C54.6213 488 0 433.379 0 366C0 298.621 54.6213 244 122 244C189.379 244 244 298.621 244 366C244 433.379 298.621 488 366 488C433.379 488 488 433.379 488 366C488 298.621 433.379 244 366 244Z" fill="#C5C5C5"/>
+</g>
 </svg>
