@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-08-22
+
+### Fixed
+
+- **The logo is the logo again.** 0.2.0 and 0.2.1 shipped a redrawn mark: the
+  outline dilated until the centre closed, which reads as a different symbol
+  rather than a heavier one. Both icons are restored byte for byte to what they
+  were, plate and all — a mark on transparency vanishes against the light
+  backgrounds the marketplace and the Extensions sidebar use.
+
 ## [0.2.1] - 2026-08-22
 
 ### Fixed
