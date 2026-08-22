@@ -362,7 +362,7 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
 }
 /*
- * The tick column: a fixed 22px, absolutely placed, with the label indented
+ * The tick column: a fixed 24px, absolutely placed, with the label indented
  * past it by exactly the same amount.
  *
  * It was 1em wide, holding a codicon that is 16px whatever the font is - so
@@ -372,12 +372,47 @@ input[type="number"]::-webkit-outer-spin-button {
  * measure the label from it.
  */
 .stk-menu-check {
-  position: absolute; left: 0; top: 0; width: 22px; height: 100%;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute; left: 0; top: 0; width: 24px; height: 100%;
 }
-.stk-menu-check .codicon { font-size: 14px; }
+/*
+ * The tick's SIZE needs two classes to say, and that is not a style choice.
+ *
+ * codicon.css sets every glyph through ".codicon[class*='codicon-']" - a class
+ * and an attribute test - using the "font" shorthand. A rule here carrying one
+ * class loses to it silently: the declaration is dropped and the tick renders
+ * at 16px beside a 12px label, filling its column and landing against the
+ * first letter. Which is what it was doing.
+ *
+ * 13px in a 24px column leaves the glyph a little air on both sides and the
+ * label its own space, at a weight that matches the text it marks rather than
+ * shouting over it.
+ *
+ * The CENTRING is the same rule and the same reason. codicon.css also says
+ * "display: inline-block" there, so a single-class "display: flex" was dropped
+ * too - and with no flex container the tick was not centred at all. It sat in
+ * a line box 13px tall at the top of a 24px row, five and a half pixels high,
+ * which is what you see and cannot name. A codicon draws through ::before, so
+ * there is no text node to align by hand: the box has to be a flex container
+ * and let the pseudo-element be its item.
+ */
+.stk-menu-check.codicon {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+}
+/*
+ * The line box is the ROW's height, not the font's size.
+ *
+ * "overflow: hidden" is here to make the ellipsis work, and it clips to the
+ * content box - so a line-height of 1 makes that box 12px around text that
+ * needs 16, and the two pixels top and bottom go. The bottom two are every
+ * descender in the menu: the p in "Alphabetical" lost its tail, and nothing
+ * about it looked like a CSS bug, just a slightly wrong font.
+ *
+ * 24px matches the item, so the text sits centred in the row it belongs to
+ * with room for the parts of letters that hang below the baseline.
+ */
 .stk-menu-label {
-  flex: 1 1 auto; padding: 0 8px 0 22px; font-size: 12px; line-height: 1;
+  flex: 1 1 auto; padding: 0 8px 0 24px; font-size: 12px; line-height: 24px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* What the submenu resolves to, in the place and the weight the workbench
@@ -392,7 +427,7 @@ input[type="number"]::-webkit-outer-spin-button {
 /* Dimmed like the workbench's own submenu chevron: it is an affordance, not a
    thing to read. */
 .stk-menu-more { flex: 0 0 auto; margin-left: auto; padding-right: 6px; opacity: .8; }
-.stk-menu-more.codicon { font-size: 14px; }
+.stk-menu-more.codicon { font-size: 13px; }
 /* Greyed but still readable, and never highlighted - a section with nothing in
    it says so rather than vanishing, which would leave you wondering whether
    you had missed it. */
